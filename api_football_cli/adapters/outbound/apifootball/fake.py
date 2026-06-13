@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from api_football_cli.application.ports.football_api import ApiFootballError
+from api_football_cli.application.ports.football_api import ApiFootballError, FootballApi
 from api_football_cli.domain.entities import (
     AccountStatus,
     FixtureSnapshot,
@@ -42,7 +42,7 @@ class ReplayFile(FrozenModel):
         path.write_text(self.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
 
-class FakeFootballApi:
+class FakeFootballApi(FootballApi):
     """Implements the live-flow endpoints of FootballApi from a recording."""
 
     def __init__(self, *, replay: ReplayFile, minutes_per_poll: int) -> None:

@@ -6,10 +6,10 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from api_football_cli.application.ports.event_bus import Notification
+from api_football_cli.application.ports.event_bus import EventBus, Notification
 
 
-class InMemoryBus:
+class InMemoryBus(EventBus):
     def __init__(self) -> None:
         self._queues: dict[str, set[asyncio.Queue[Notification]]] = {}
 

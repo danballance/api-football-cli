@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import asynccontextmanager
 from typing import Protocol
 
-from api_football_cli.application.ports.event_bus import BusError, Notification
+from api_football_cli.application.ports.event_bus import BusError, EventBus, Notification
 
 ListenCallback = Callable[[object, object, object, object], None]
 
@@ -31,7 +31,7 @@ class NotifyConnection(Protocol):
 Connector = Callable[[], Coroutine[None, None, NotifyConnection]]
 
 
-class PostgresListenNotifyBus:
+class PostgresListenNotifyBus(EventBus):
     def __init__(self, connect: Connector) -> None:
         self._connect = connect
         self._connection: NotifyConnection | None = None

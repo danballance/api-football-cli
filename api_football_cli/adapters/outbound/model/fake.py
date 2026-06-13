@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from api_football_cli.application.ports.commentary_model import CommentaryModelError
+from api_football_cli.application.ports.commentary_model import (
+    CommentaryModel,
+    CommentaryModelError,
+)
 from api_football_cli.domain.entities import CommentaryResult, SpeakerRole, Turn
 
 # Lines for demo runs; "{feed}" is replaced with the latest match-feed line so
@@ -17,7 +20,7 @@ DEFAULT_FAKE_LINES: tuple[str, ...] = (
 )
 
 
-class FakeModel:
+class FakeModel(CommentaryModel):
     def __init__(self, *, lines: Sequence[str]) -> None:
         if not lines:
             raise CommentaryModelError("FakeModel needs at least one canned line")

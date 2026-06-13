@@ -29,7 +29,14 @@ from api_football_cli.adapters.outbound.persistence.tables import (
     TeamRow,
     VenueRow,
 )
-from api_football_cli.application.ports.repositories import NotFoundError
+from api_football_cli.application.ports.repositories import (
+    CommentaryRepository,
+    CommentatorRepository,
+    EventRepository,
+    FixtureRepository,
+    NotFoundError,
+    ReferenceRepository, ApiRequestLogRepository,
+)
 from api_football_cli.domain.entities import (
     CommentaryDraft,
     CommentaryMessage,
@@ -171,7 +178,7 @@ async def _fixture_to_domain(session: AsyncSession, row: FixtureRow) -> Fixture:
     )
 
 
-class SqlFixtureRepository:
+class SqlFixtureRepository(FixtureRepository):
     def __init__(self, sessions: SessionFactory) -> None:
         self._sessions = sessions
 
@@ -232,7 +239,7 @@ class SqlFixtureRepository:
             return [await _fixture_to_domain(session, row) for row in rows]
 
 
-class SqlEventRepository:
+class SqlEventRepository(EventRepository):
     def __init__(self, sessions: SessionFactory) -> None:
         self._sessions = sessions
 
@@ -333,7 +340,7 @@ def _player_ref(row: PlayerRow | None) -> PlayerRef | None:
     return PlayerRef(api_player_id=row.api_player_id, name=row.name)
 
 
-class SqlCommentatorRepository:
+class SqlCommentatorRepository(CommentatorRepository):
     def __init__(self, sessions: SessionFactory) -> None:
         self._sessions = sessions
 
@@ -376,7 +383,7 @@ def _commentator_to_domain(row: CommentatorRow) -> Commentator:
     )
 
 
-class SqlCommentaryRepository:
+class SqlCommentaryRepository(CommentaryRepository):
     def __init__(self, sessions: SessionFactory) -> None:
         self._sessions = sessions
 
@@ -442,7 +449,7 @@ def _message_to_domain(row: CommentaryMessageRow) -> CommentaryMessage:
     )
 
 
-class SqlReferenceRepository:
+class SqlReferenceRepository(ReferenceRepository):
     def __init__(self, sessions: SessionFactory) -> None:
         self._sessions = sessions
 
@@ -537,7 +544,7 @@ class SqlReferenceRepository:
                 return row.id
 
 
-class SqlApiRequestLogRepository:
+class SqlApiRequestLogRepository(ApiRequestLogRepository):
     def __init__(self, sessions: SessionFactory) -> None:
         self._sessions = sessions
 

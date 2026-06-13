@@ -20,7 +20,7 @@ from api_football_cli.adapters.outbound.apifootball.wire import (
     WireStatusItem,
     WireTeamItem,
 )
-from api_football_cli.application.ports.football_api import ApiFootballError
+from api_football_cli.application.ports.football_api import ApiFootballError, FootballApi
 from api_football_cli.domain.entities import (
     AccountStatus,
     FixtureSnapshot,
@@ -34,7 +34,7 @@ REMAINING_HEADER = "x-ratelimit-requests-remaining"
 ItemT = TypeVar("ItemT", bound=BaseModel)
 
 
-class HttpxFootballApi:
+class HttpxFootballApi(FootballApi):  # noqa: F821
     def __init__(self, *, api_key: str, base_url: str, http_client: httpx.AsyncClient) -> None:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
