@@ -1,0 +1,184 @@
+:root {
+  --bg: #0e1116;
+  --panel: #161b24;
+  --panel-2: #1d2430;
+  --text: #e8edf4;
+  --muted: #8b97a8;
+  --pbp: #2f81f7;
+  --color: #d29922;
+  --live: #3fb950;
+  --down: #f85149;
+  font-size: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.app {
+  max-width: 760px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.scoreboard {
+  position: sticky;
+  top: 0;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border-bottom: 1px solid #2a3342;
+  padding: 1rem 1.25rem;
+  text-align: center;
+  z-index: 10;
+}
+
+.scoreboard .league {
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.score-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1rem;
+  margin: 0.4rem 0;
+}
+
+.score-row .team {
+  font-weight: 600;
+  font-size: 1.1rem;
+  flex: 1;
+}
+
+.score-row .home {
+  text-align: right;
+}
+
+.score-row .away {
+  text-align: left;
+}
+
+.score-row .score {
+  font-size: 1.9rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.clock {
+  color: var(--live);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.chat {
+  flex: 1;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  margin-top: 3rem;
+}
+
+.message {
+  display: flex;
+  gap: 0.6rem;
+  max-width: 85%;
+}
+
+.message.left {
+  align-self: flex-start;
+}
+
+.message.right {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.avatar {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.avatar.play_by_play {
+  background: var(--pbp);
+}
+
+.avatar.color {
+  background: var(--color);
+}
+
+.bubble {
+  background: var(--panel);
+  border: 1px solid #2a3342;
+  border-radius: 14px;
+  padding: 0.6rem 0.85rem;
+}
+
+.message.right .bubble {
+  background: var(--panel-2);
+}
+
+.speaker {
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 0.2rem;
+}
+
+.text {
+  line-height: 1.45;
+}
+
+.status {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1.25rem;
+  background: var(--panel);
+  border-top: 1px solid #2a3342;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+}
+
+.dot.live {
+  background: var(--live);
+  box-shadow: 0 0 6px var(--live);
+}
+
+.dot.down {
+  background: var(--down);
+}

@@ -1,0 +1,121 @@
+{
+  "fixture": {
+    "api_fixture_id": 999001,
+    "league": {
+      "api_league_id": 9990,
+      "name": "Demo Premier League",
+      "country": "Demoland",
+      "season": 2025
+    },
+    "kickoff": "2025-08-16T14:00:00Z",
+    "status": "NS",
+    "elapsed": null,
+    "home": { "api_team_id": 9001, "name": "Riverton Albion" },
+    "away": { "api_team_id": 9002, "name": "Kingsport Wanderers" },
+    "home_goals": null,
+    "away_goals": null,
+    "referee": "A. Whistler"
+  },
+  "events": [
+    {
+      "elapsed": 9,
+      "extra": null,
+      "team": { "api_team_id": 9001, "name": "Riverton Albion" },
+      "player": { "api_player_id": 70001, "name": "D. Mercer" },
+      "assist": { "api_player_id": 70002, "name": "L. Carter" },
+      "type": "Goal",
+      "detail": "Normal Goal",
+      "comments": null
+    },
+    {
+      "elapsed": 21,
+      "extra": null,
+      "team": { "api_team_id": 9002, "name": "Kingsport Wanderers" },
+      "player": { "api_player_id": 70013, "name": "S. Okafor" },
+      "assist": { "api_player_id": null, "name": null },
+      "type": "Card",
+      "detail": "Yellow Card",
+      "comments": "Late challenge"
+    },
+    {
+      "elapsed": 33,
+      "extra": null,
+      "team": { "api_team_id": 9002, "name": "Kingsport Wanderers" },
+      "player": { "api_player_id": 70011, "name": "J. Vidal" },
+      "assist": { "api_player_id": 70012, "name": "M. Haddad" },
+      "type": "Goal",
+      "detail": "Normal Goal",
+      "comments": null
+    },
+    {
+      "elapsed": 37,
+      "extra": null,
+      "team": { "api_team_id": 9001, "name": "Riverton Albion" },
+      "player": { "api_player_id": 70003, "name": "T. Brandt" },
+      "assist": { "api_player_id": null, "name": null },
+      "type": "Goal",
+      "detail": "Goal Disallowed - offside",
+      "comments": "VAR check complete"
+    },
+    {
+      "elapsed": 45,
+      "extra": 1,
+      "team": { "api_team_id": 9001, "name": "Riverton Albion" },
+      "player": { "api_player_id": 70004, "name": "A. Cole" },
+      "assist": { "api_player_id": null, "name": null },
+      "type": "Card",
+      "detail": "Yellow Card",
+      "comments": "Dissent"
+    },
+    {
+      "elapsed": 58,
+      "extra": null,
+      "team": { "api_team_id": 9002, "name": "Kingsport Wanderers" },
+      "player": { "api_player_id": 70014, "name": "R. Quinn" },
+      "assist": { "api_player_id": 70011, "name": "J. Vidal" },
+      "type": "subst",
+      "detail": "Substitution 1",
+      "comments": null
+    },
+    {
+      "elapsed": 67,
+      "extra": null,
+      "team": { "api_team_id": 9001, "name": "Riverton Albion" },
+      "player": { "api_player_id": 70001, "name": "D. Mercer" },
+      "assist": { "api_player_id": null, "name": null },
+      "type": "Goal",
+      "detail": "Penalty",
+      "comments": "Handball in the area"
+    },
+    {
+      "elapsed": 74,
+      "extra": null,
+      "team": { "api_team_id": 9002, "name": "Kingsport Wanderers" },
+      "player": { "api_player_id": 70013, "name": "S. Okafor" },
+      "assist": { "api_player_id": null, "name": null },
+      "type": "Card",
+      "detail": "Red Card",
+      "comments": "Serious foul play"
+    },
+    {
+      "elapsed": 81,
+      "extra": null,
+      "team": { "api_team_id": 9001, "name": "Riverton Albion" },
+      "player": { "api_player_id": 70005, "name": "P. Novak" },
+      "assist": { "api_player_id": 70006, "name": "E. Mason" },
+      "type": "subst",
+      "detail": "Substitution 1",
+      "comments": null
+    },
+    {
+      "elapsed": 90,
+      "extra": 3,
+      "team": { "api_team_id": 9002, "name": "Kingsport Wanderers" },
+      "player": { "api_player_id": 70015, "name": "K. Sato" },
+      "assist": { "api_player_id": 70014, "name": "R. Quinn" },
+      "type": "Goal",
+      "detail": "Normal Goal",
+      "comments": null
+    }
+  ]
+}
