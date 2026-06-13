@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Callable
 
 import pytest
+
 from api_football_cli.adapters.outbound.messaging.in_memory import InMemoryBus
 from api_football_cli.adapters.outbound.messaging.postgres import (
     PostgresListenNotifyBus,

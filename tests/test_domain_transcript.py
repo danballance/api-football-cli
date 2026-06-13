@@ -8,7 +8,6 @@ from api_football_cli.domain.entities import (
     StoredFixtureEvent,
 )
 from api_football_cli.domain.transcript import build_transcript
-
 from tests.factories import make_event
 from tests.fakes import next_timestamp
 

@@ -14,7 +14,6 @@ from api_football_cli.domain.entities import (
     TeamWithVenue,
     Venue,
 )
-
 from tests.factories import make_snapshot
 from tests.fakes import (
     InMemoryFixtureRepository,

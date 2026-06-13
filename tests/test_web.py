@@ -13,6 +13,8 @@ from contextlib import asynccontextmanager
 
 import httpx
 import pytest
+from fastapi import FastAPI
+
 from api_football_cli.adapters.inbound.web.app import WebDeps, create_app
 from api_football_cli.adapters.inbound.web.sse import commentary_sse, format_sse
 from api_football_cli.adapters.outbound.messaging.in_memory import InMemoryBus
@@ -20,8 +22,6 @@ from api_football_cli.application.services.stream_commentary import StreamCommen
 from api_football_cli.domain.entities import CommentaryDraft, CommentaryMessage
 from api_football_cli.domain.personas import PERSONAS
 from api_football_cli.main import FRONTEND_DIR, build_server
-from fastapi import FastAPI
-
 from tests.factories import make_event, make_snapshot
 from tests.fakes import (
     InMemoryCommentaryRepository,

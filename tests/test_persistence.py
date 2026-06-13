@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
+
 from api_football_cli.adapters.outbound.persistence.engine import SessionFactory
 from api_football_cli.adapters.outbound.persistence.repositories import (
     SqlApiRequestLogRepository,
@@ -27,8 +29,6 @@ from api_football_cli.domain.entities import (
     Venue,
 )
 from api_football_cli.domain.personas import PERSONAS
-from sqlalchemy import select
-
 from tests.factories import AWAY, make_event, make_snapshot
 
 COVERAGE = Coverage(

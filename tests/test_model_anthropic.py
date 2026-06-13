@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 import pytest
 from anthropic import AsyncAnthropic, DefaultAsyncHttpxClient
+
 from api_football_cli.adapters.outbound.model.anthropic import (
     AnthropicCommentaryModel,
     transcript_to_messages,

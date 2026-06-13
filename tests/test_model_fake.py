@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from api_football_cli.adapters.outbound.model.fake import DEFAULT_FAKE_LINES, FakeModel
 from api_football_cli.application.ports.commentary_model import CommentaryModelError
 from api_football_cli.domain.entities import SpeakerRole, Turn

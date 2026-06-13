@@ -2,12 +2,10 @@
 
 ## Layout
 
-The package lives in `./api-football-cli/` (project rule); the importable package inside it is
-`api_football_cli` (hatchling maps `api-football-cli/api_football_cli` → `api_football_cli`),
-which keeps `uv run pytest --cov ./api-football-cli/ tests` working verbatim.
+The importable package lives directly in `./api_football_cli/`.
 
 ```
-api-football-cli/api_football_cli/
+api_football_cli/
   domain/             entities + pure logic: event hash, rendering, director, transcript, personas
   application/
     ports/            Protocols: FootballApi, repositories, EventBus, CommentaryModel
@@ -35,7 +33,7 @@ adapters implement the application's ports; `main.py` wires everything.
 ```bash
 uv run ruff check
 uv run ty check
-uv run pytest --cov ./api-football-cli/ tests    # coverage gate: >90% (fail_under=90)
+uv run pytest --cov ./api_football_cli/ tests    # coverage gate: >90% (fail_under=90)
 ```
 
 ## Testing strategy

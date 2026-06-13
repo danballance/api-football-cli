@@ -7,7 +7,6 @@ import asyncio
 from api_football_cli.adapters.outbound.messaging.in_memory import InMemoryBus
 from api_football_cli.application.services.stream_commentary import StreamCommentary
 from api_football_cli.domain.entities import CommentaryDraft
-
 from tests.fakes import InMemoryCommentaryRepository
 
 

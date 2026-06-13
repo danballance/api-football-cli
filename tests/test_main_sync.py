@@ -7,7 +7,6 @@ from pathlib import Path
 from api_football_cli.adapters.outbound.persistence.engine import create_engine_and_sessions
 from api_football_cli.adapters.outbound.persistence.tables import Base
 from api_football_cli.main import run_sync_fixtures, run_sync_leagues, run_sync_teams
-
 from tests.factories import make_snapshot
 from tests.fakes import StubFootballApi
 from tests.test_sync_service import LEAGUES, TEAMS

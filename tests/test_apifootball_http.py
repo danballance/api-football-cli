@@ -6,6 +6,7 @@ import json
 
 import httpx
 import pytest
+
 from api_football_cli.adapters.outbound.apifootball.http import HttpxFootballApi
 from api_football_cli.application.ports.football_api import ApiFootballError
 from api_football_cli.domain.entities import FixtureStatus

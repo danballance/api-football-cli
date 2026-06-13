@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+
 from api_football_cli.adapters.outbound.apifootball.fake import FakeFootballApi, ReplayFile
 from api_football_cli.adapters.outbound.apifootball.http import HttpxFootballApi
 from api_football_cli.adapters.outbound.model.anthropic import AnthropicCommentaryModel
@@ -28,7 +29,6 @@ from api_football_cli.main import (
     run_status,
     serve_runtime,
 )
-
 from tests.factories import make_event, make_snapshot
 from tests.fakes import StubFootballApi
 

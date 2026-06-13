@@ -21,7 +21,6 @@ from api_football_cli.application.services.ingest_events import IngestFixtureEve
 from api_football_cli.application.services.stream_commentary import StreamCommentary
 from api_football_cli.domain.entities import CommentaryMessage, FixtureStatus
 from api_football_cli.domain.personas import PERSONAS
-
 from tests.fakes import (
     InMemoryCommentaryRepository,
     InMemoryCommentatorRepository,

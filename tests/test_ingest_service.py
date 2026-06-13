@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import pytest
+
 from api_football_cli.application.services.ingest_events import (
     IngestFixtureEvents,
     QuotaExhaustedError,
 )
 from api_football_cli.domain.entities import FixtureStatus
-
 from tests.factories import AWAY, make_event, make_snapshot
 from tests.fakes import (
     InMemoryEventRepository,

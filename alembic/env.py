@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import os
 
-from api_football_cli.adapters.outbound.persistence.tables import Base
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
+from api_football_cli.adapters.outbound.persistence.tables import Base
 
 config = context.config
 target_metadata = Base.metadata

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from api_football_cli.config import (
     API_FOOTBALL_BASE_URL,
     ConfigError,

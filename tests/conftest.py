@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest
-from api_football_cli.adapters.outbound.persistence.engine import SessionFactory
-from api_football_cli.adapters.outbound.persistence.tables import Base
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+
+from api_football_cli.adapters.outbound.persistence.engine import SessionFactory
+from api_football_cli.adapters.outbound.persistence.tables import Base
 
 
 @pytest.fixture

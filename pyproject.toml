@@ -33,10 +33,9 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# The python package lives in ./api-football-cli/ (project rule); the importable
-# package inside it is api_football_cli. Hatchling strips the leading directory.
+# The importable package lives directly in ./api_football_cli/.
 [tool.hatch.build.targets.wheel]
-packages = ["api-football-cli/api_football_cli"]
+packages = ["api_football_cli"]
 
 [tool.ruff]
 line-length = 100

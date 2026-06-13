@@ -14,7 +14,6 @@ from api_football_cli.application.services.generate_commentary import (
     GenerateCommentaryRound,
 )
 from api_football_cli.domain.entities import SpeakerRole
-
 from tests.factories import AWAY, BOOTH, make_event, make_snapshot
 from tests.fakes import (
     InMemoryCommentaryRepository,

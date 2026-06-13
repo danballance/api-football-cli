@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
+
 from api_football_cli.domain.director import DirectorError, plan_round
 from api_football_cli.domain.entities import CommentatorRole
-
 from tests.factories import BOOTH, make_commentator
 
 

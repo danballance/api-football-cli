@@ -9,7 +9,6 @@ from api_football_cli.domain.events import (
     minute_label,
     render_event,
 )
-
 from tests.factories import AWAY, make_event
 
 

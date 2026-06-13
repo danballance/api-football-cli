@@ -18,7 +18,10 @@ from collections.abc import Sequence
 import anthropic
 from anthropic.types import MessageParam
 
-from api_football_cli.application.ports.commentary_model import CommentaryModelError
+from api_football_cli.application.ports.commentary_model import (
+    CommentaryModel,
+    CommentaryModelError,
+)
 from api_football_cli.domain.entities import CommentaryResult, SpeakerRole, Turn
 
 _USER_LABELS = {
@@ -55,7 +58,7 @@ def transcript_to_messages(transcript: Sequence[Turn]) -> list[MessageParam]:
     ]
 
 
-class AnthropicCommentaryModel:
+class AnthropicCommentaryModel(CommentaryModel):
     def __init__(self, *, client: anthropic.AsyncAnthropic, model: str, max_tokens: int) -> None:
         self._client = client
         self._model = model

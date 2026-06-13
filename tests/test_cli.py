@@ -6,6 +6,8 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
+
 from api_football_cli import main as composition
 from api_football_cli.adapters.inbound.cli.app import app
 from api_football_cli.adapters.outbound.apifootball.fake import ReplayFile
@@ -15,8 +17,6 @@ from api_football_cli.application.services.sync_reference import (
     TeamSyncReport,
 )
 from api_football_cli.domain.entities import AccountStatus, FixtureStatus
-from typer.testing import CliRunner
-
 from tests.factories import make_event, make_snapshot
 from tests.fakes import StubFootballApi
 

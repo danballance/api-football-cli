@@ -81,5 +81,5 @@ uv run afc sync fixtures --league 39 --season 2025
 ```bash
 uv run ruff check
 uv run ty check
-uv run pytest --cov ./api-football-cli/ tests
+uv run pytest --cov ./api_football_cli/ tests
 ```

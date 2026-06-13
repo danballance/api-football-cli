@@ -70,8 +70,8 @@ from api_football_cli.domain.personas import PERSONAS
 MAX_MESSAGES_PER_ROUND = 2
 SSE_PING_SECONDS = 15.0
 
-# The frontend ships with the repository, two levels above the package dir.
-FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+# The frontend ships at the repository root beside the package directory.
+FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
 
 class RecordError(RuntimeError):

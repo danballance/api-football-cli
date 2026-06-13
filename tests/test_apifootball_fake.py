@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from api_football_cli.adapters.outbound.apifootball.fake import FakeFootballApi, ReplayFile
 from api_football_cli.application.ports.football_api import ApiFootballError
 from api_football_cli.domain.entities import FixtureStatus
-
 from tests.factories import AWAY, make_event, make_snapshot
 
 REPLAY = ReplayFile(
