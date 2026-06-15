@@ -2,7 +2,7 @@
 
 Commands translate arguments + environment into use-case calls; all heavy
 lifting lives in the composition root and the application services. Every
-parameter is explicit — there are no default poll intervals, ports or steps.
+operational parameter is explicit.
 """
 
 from __future__ import annotations
@@ -17,7 +17,9 @@ from alembic.config import Config as AlembicConfig
 
 from alembic import command as alembic_command
 from api_football_cli import main as composition
+from api_football_cli.application.ports.football_api import FootballApi
 from api_football_cli.config import (
+    ApiFootballConfig,
     ConfigError,
     load_apifootball_config,
     load_database_config,
@@ -47,14 +49,62 @@ def _config_error(message: str) -> typer.Exit:
     return typer.Exit(code=1)
 
 
+def _runtime_api_config(
+    *,
+    replay: Path | None,
+    replay_step: int | None,
+    quota_floor: int | None,
+) -> ApiFootballConfig | None:
+    if replay is not None:
+        if replay_step is None:
+            raise ConfigError("--replay requires --replay-step (minutes per poll)")
+        if quota_floor is not None:
+            raise ConfigError("--quota-floor is live-mode only")
+        return None
+    if replay_step is not None:
+        raise ConfigError("--replay-step requires --replay")
+    if quota_floor is None:
+        raise ConfigError("live mode requires --quota-floor")
+    return load_apifootball_config()
+
+
+async def _run_and_close_api[ResultT](
+    *, api: FootballApi, coro: Coroutine[None, None, ResultT]
+) -> ResultT:
+    try:
+        return await coro
+    finally:
+        await composition.close_football_api(api)
+
+
 @app.command()
-def serve(
+def web(
+    host: Annotated[str, typer.Option(help="Bind address for the web server.")],
+    port: Annotated[int, typer.Option(help="Bind port for the web server.")],
+    sse_ping_seconds: Annotated[
+        float, typer.Option(help="Seconds between SSE keep-alive comments.")
+    ],
+) -> None:
+    """Run FastAPI/Uvicorn only."""
+    try:
+        config = composition.WebConfig(
+            host=host,
+            port=port,
+            database=load_database_config(),
+            frontend_dir=composition.FRONTEND_DIR,
+            sse_ping_seconds=sse_ping_seconds,
+        )
+    except ConfigError as exc:
+        raise _config_error(str(exc)) from exc
+    _run(composition.run_web(config))
+
+
+@app.command()
+def ingest(
     fixture: Annotated[int, typer.Option(help="api-football fixture id to follow.")],
     interval: Annotated[
         float, typer.Option(help="Seconds between polls (recommend 15-30 live).")
     ],
-    host: Annotated[str, typer.Option(help="Bind address for the web server.")],
-    port: Annotated[int, typer.Option(help="Bind port for the web server.")],
     replay: Annotated[
         Path | None,
         typer.Option(help="Replay file (from `afc record`); omit for live polling."),
@@ -68,32 +118,103 @@ def serve(
         typer.Option(help="Stop before the daily quota drops to this value (live mode)."),
     ] = None,
 ) -> None:
-    """Run the live runtime: ingestion + commentary worker + web server."""
+    """Poll live/replay fixture data into Postgres."""
     try:
-        if replay is not None:
-            if replay_step is None:
-                raise ConfigError("--replay requires --replay-step (minutes per poll)")
-            apifootball = None
-        else:
-            if quota_floor is None:
-                raise ConfigError("live mode requires --quota-floor")
-            apifootball = load_apifootball_config()
-        config = composition.ServeConfig(
+        config = composition.IngestConfig(
+            api_fixture_id=fixture,
+            interval_seconds=interval,
+            database=load_database_config(),
+            apifootball=_runtime_api_config(
+                replay=replay, replay_step=replay_step, quota_floor=quota_floor
+            ),
+            quota_floor=quota_floor,
+            replay_path=replay,
+            replay_step_minutes=replay_step,
+        )
+    except ConfigError as exc:
+        raise _config_error(str(exc)) from exc
+    final = _run(composition.run_ingest(config))
+    typer.echo(
+        f"ingested fixture {final.api_fixture_id} through status={final.status.value!r}"
+    )
+
+
+@app.command()
+def worker(
+    fixture: Annotated[int, typer.Option(help="api-football fixture id to commentate.")],
+    fixture_wait_seconds: Annotated[
+        float,
+        typer.Option(
+            help="Seconds to wait for the ingester to create the fixture row; use 0 to fail fast."
+        ),
+    ],
+    max_messages_per_round: Annotated[
+        int, typer.Option(help="Maximum commentary messages produced per event round.")
+    ],
+) -> None:
+    """Generate commentary from stored fixture events."""
+    try:
+        config = composition.WorkerConfig(
+            api_fixture_id=fixture,
+            database=load_database_config(),
+            model=load_model_config(),
+            fixture_wait_seconds=fixture_wait_seconds,
+            max_messages_per_round=max_messages_per_round,
+        )
+    except ConfigError as exc:
+        raise _config_error(str(exc)) from exc
+    _run(composition.run_worker(config))
+
+
+@app.command()
+def dev(
+    fixture: Annotated[int, typer.Option(help="api-football fixture id to follow.")],
+    interval: Annotated[
+        float, typer.Option(help="Seconds between polls (recommend 15-30 live).")
+    ],
+    host: Annotated[str, typer.Option(help="Bind address for the web server.")],
+    port: Annotated[int, typer.Option(help="Bind port for the web server.")],
+    sse_ping_seconds: Annotated[
+        float, typer.Option(help="Seconds between SSE keep-alive comments.")
+    ],
+    max_messages_per_round: Annotated[
+        int, typer.Option(help="Maximum commentary messages produced per event round.")
+    ],
+    replay: Annotated[
+        Path | None,
+        typer.Option(help="Replay file (from `afc record`); omit for live polling."),
+    ] = None,
+    replay_step: Annotated[
+        int | None,
+        typer.Option(help="Simulated match minutes advanced per poll (replay mode)."),
+    ] = None,
+    quota_floor: Annotated[
+        int | None,
+        typer.Option(help="Stop before the daily quota drops to this value (live mode)."),
+    ] = None,
+) -> None:
+    """Run ingestion + commentary worker + web server in one local dev process."""
+    try:
+        config = composition.DevConfig(
             api_fixture_id=fixture,
             interval_seconds=interval,
             host=host,
             port=port,
             database=load_database_config(),
             model=load_model_config(),
-            apifootball=apifootball,
+            apifootball=_runtime_api_config(
+                replay=replay, replay_step=replay_step, quota_floor=quota_floor
+            ),
             quota_floor=quota_floor,
             replay_path=replay,
             replay_step_minutes=replay_step,
             frontend_dir=composition.FRONTEND_DIR,
+            sse_ping_seconds=sse_ping_seconds,
+            max_messages_per_round=max_messages_per_round,
         )
     except ConfigError as exc:
         raise _config_error(str(exc)) from exc
-    _run(composition.run_serve(config))
+    _run(composition.run_dev(config))
 
 
 @app.command()
@@ -106,7 +227,12 @@ def record(
         api = composition.build_live_api(load_apifootball_config())
     except ConfigError as exc:
         raise _config_error(str(exc)) from exc
-    replay = _run(composition.run_record(api=api, api_fixture_id=fixture, output=output))
+    replay = _run(
+        _run_and_close_api(
+            api=api,
+            coro=composition.run_record(api=api, api_fixture_id=fixture, output=output),
+        )
+    )
     typer.echo(
         f"recorded fixture {fixture} ({replay.fixture.home.name} vs "
         f"{replay.fixture.away.name}, {len(replay.events)} events) -> {output}"
@@ -120,7 +246,9 @@ def status() -> None:
         api = composition.build_live_api(load_apifootball_config())
     except ConfigError as exc:
         raise _config_error(str(exc)) from exc
-    account = _run(composition.run_status(api=api))
+    account = _run(
+        _run_and_close_api(api=api, coro=composition.run_status(api=api))
+    )
     typer.echo(
         f"account={account.account_name!r} plan={account.plan!r} active={account.active} "
         f"requests today={account.requests_today}/{account.daily_limit}"
@@ -138,7 +266,12 @@ def sync_leagues(
     except ConfigError as exc:
         raise _config_error(str(exc)) from exc
     report = _run(
-        composition.run_sync_leagues(api=api, database_url=database.url, season=season)
+        _run_and_close_api(
+            api=api,
+            coro=composition.run_sync_leagues(
+                api=api, database_url=database.url, season=season
+            ),
+        )
     )
     typer.echo(f"synced {report.leagues} leagues, {report.seasons} seasons")
 
@@ -155,8 +288,14 @@ def sync_teams(
     except ConfigError as exc:
         raise _config_error(str(exc)) from exc
     report = _run(
-        composition.run_sync_teams(
-            api=api, database_url=database.url, league_api_id=league, season=season
+        _run_and_close_api(
+            api=api,
+            coro=composition.run_sync_teams(
+                api=api,
+                database_url=database.url,
+                league_api_id=league,
+                season=season,
+            ),
         )
     )
     typer.echo(f"synced {report.teams} teams, {report.venues} venues")
@@ -174,8 +313,14 @@ def sync_fixtures(
     except ConfigError as exc:
         raise _config_error(str(exc)) from exc
     report = _run(
-        composition.run_sync_fixtures(
-            api=api, database_url=database.url, league_api_id=league, season=season
+        _run_and_close_api(
+            api=api,
+            coro=composition.run_sync_fixtures(
+                api=api,
+                database_url=database.url,
+                league_api_id=league,
+                season=season,
+            ),
         )
     )
     typer.echo(f"synced {report.fixtures} fixtures")

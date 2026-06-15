@@ -1,15 +1,10 @@
-"""Composition root (architecture §3).
-
-Reads explicit config, builds the adapters, injects them into the application
-services, and supervises the three runtime tasks — ingestion, commentary
-worker, web server — in a single asyncio TaskGroup. Any task's unhandled
-error cancels its siblings and takes the process down (fail fast, §1).
-"""
+"""Composition root: builders plus process-specific runtime entrypoints."""
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
+from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -18,6 +13,8 @@ import asyncpg
 import httpx
 import uvicorn
 from fastapi import FastAPI
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from api_football_cli.adapters.inbound.web.app import WebDeps, create_app
 from api_football_cli.adapters.outbound.apifootball.fake import FakeFootballApi, ReplayFile
@@ -39,6 +36,7 @@ from api_football_cli.adapters.outbound.persistence.repositories import (
 )
 from api_football_cli.application.ports.commentary_model import CommentaryModel
 from api_football_cli.application.ports.football_api import FootballApi
+from api_football_cli.application.ports.repositories import FixtureRepository, NotFoundError
 from api_football_cli.application.services.generate_commentary import (
     CommentaryWorker,
     GenerateCommentaryRound,
@@ -61,6 +59,7 @@ from api_football_cli.domain.entities import (
     TERMINAL_STATUSES,
     AccountStatus,
     Commentator,
+    Fixture,
     FrozenModel,
 )
 from api_football_cli.domain.personas import PERSONAS
@@ -69,6 +68,8 @@ from api_football_cli.domain.personas import PERSONAS
 # play-by-play reacts, the colour commentator responds.
 MAX_MESSAGES_PER_ROUND = 2
 SSE_PING_SECONDS = 15.0
+FIXTURE_WAIT_POLL_SECONDS = 0.25
+WORKER_LOCK_NAMESPACE = 0x0AFC
 
 # The frontend ships at the repository root beside the package directory.
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
@@ -78,7 +79,33 @@ class RecordError(RuntimeError):
     """Raised when a fixture cannot be recorded for replay."""
 
 
-class ServeConfig(FrozenModel):
+class WebConfig(FrozenModel):
+    host: str
+    port: int
+    database: DatabaseConfig
+    frontend_dir: Path | None
+    sse_ping_seconds: float
+
+
+class IngestConfig(FrozenModel):
+    api_fixture_id: int
+    interval_seconds: float
+    database: DatabaseConfig
+    apifootball: ApiFootballConfig | None
+    quota_floor: int | None
+    replay_path: Path | None
+    replay_step_minutes: int | None
+
+
+class WorkerConfig(FrozenModel):
+    api_fixture_id: int
+    database: DatabaseConfig
+    model: ModelConfig
+    fixture_wait_seconds: float
+    max_messages_per_round: int
+
+
+class DevConfig(FrozenModel):
     api_fixture_id: int
     interval_seconds: float
     host: str
@@ -90,6 +117,8 @@ class ServeConfig(FrozenModel):
     replay_path: Path | None
     replay_step_minutes: int | None
     frontend_dir: Path | None
+    sse_ping_seconds: float
+    max_messages_per_round: int
 
 
 def build_commentary_model(config: ModelConfig) -> CommentaryModel:
@@ -119,16 +148,42 @@ def build_replay_api(*, replay_path: Path, step_minutes: int) -> FakeFootballApi
     )
 
 
-def build_serve_api(config: ServeConfig) -> FootballApi:
-    if config.replay_path is not None:
-        if config.replay_step_minutes is None:
+def build_fixture_api(
+    *,
+    replay_path: Path | None,
+    replay_step_minutes: int | None,
+    apifootball: ApiFootballConfig | None,
+) -> FootballApi:
+    if replay_path is not None:
+        if replay_step_minutes is None:
             raise ConfigError("replay mode requires an explicit replay step")
         return build_replay_api(
-            replay_path=config.replay_path, step_minutes=config.replay_step_minutes
+            replay_path=replay_path, step_minutes=replay_step_minutes
         )
-    if config.apifootball is None:
+    if apifootball is None:
         raise ConfigError("live mode requires api-football configuration")
-    return build_live_api(config.apifootball)
+    return build_live_api(apifootball)
+
+
+def build_ingest_api(config: IngestConfig) -> FootballApi:
+    return build_fixture_api(
+        replay_path=config.replay_path,
+        replay_step_minutes=config.replay_step_minutes,
+        apifootball=config.apifootball,
+    )
+
+
+def build_dev_api(config: DevConfig) -> FootballApi:
+    return build_fixture_api(
+        replay_path=config.replay_path,
+        replay_step_minutes=config.replay_step_minutes,
+        apifootball=config.apifootball,
+    )
+
+
+async def close_football_api(api: FootballApi) -> None:
+    if isinstance(api, HttpxFootballApi):
+        await api.aclose()
 
 
 def _postgres_connector(dsn: str):  # pragma: no cover - thin asyncpg wrapper
@@ -162,28 +217,124 @@ async def serve_runtime(
     worker: Coroutine[None, None, object],
     server: Coroutine[None, None, object],
 ) -> None:
-    """Supervise the three runtime tasks; one crash takes everything down."""
+    """Supervise local dev tasks; one crash takes the all-in-one process down."""
     async with asyncio.TaskGroup() as group:
         group.create_task(ingestion, name="ingestion")
         group.create_task(worker, name="commentary-worker")
         group.create_task(server, name="web-server")
 
 
-async def run_serve(config: ServeConfig) -> None:
+async def run_web(config: WebConfig) -> None:
     config.database.require_postgres()
-    engine, sessions = create_engine_and_sessions(config.database.url)
-    fixtures = SqlFixtureRepository(sessions)
-    events = SqlEventRepository(sessions)
-    commentary = SqlCommentaryRepository(sessions)
-    commentator_repo = SqlCommentatorRepository(sessions)
-    request_log = SqlApiRequestLogRepository(sessions)
+    async with AsyncExitStack() as stack:
+        engine, sessions = create_engine_and_sessions(config.database.url)
+        stack.push_async_callback(engine.dispose)
 
-    bus = PostgresListenNotifyBus(_postgres_connector(config.database.notify_dsn()))
-    await bus.start()
-    api = build_serve_api(config)
-    model = build_commentary_model(config.model)
+        fixtures = SqlFixtureRepository(sessions)
+        commentary = SqlCommentaryRepository(sessions)
+        bus = PostgresListenNotifyBus(_postgres_connector(config.database.notify_dsn()))
+        await bus.start()
+        stack.push_async_callback(bus.close)
 
-    try:
+        stream = StreamCommentary(commentary=commentary, bus=bus)
+        deps = WebDeps(
+            fixtures=fixtures,
+            events=SqlEventRepository(sessions),
+            commentary=commentary,
+            commentators=SqlCommentatorRepository(sessions),
+            stream=stream,
+            sse_ping_seconds=config.sse_ping_seconds,
+        )
+        app = create_app(deps=deps, frontend_dir=config.frontend_dir)
+        server = build_server(app, host=config.host, port=config.port, log_level="info")
+        await server.serve()
+
+
+async def run_ingest(config: IngestConfig) -> Fixture:
+    config.database.require_postgres()
+    async with AsyncExitStack() as stack:
+        engine, sessions = create_engine_and_sessions(config.database.url)
+        stack.push_async_callback(engine.dispose)
+
+        api = build_ingest_api(config)
+        stack.push_async_callback(close_football_api, api)
+
+        service = IngestFixtureEvents(
+            api=api,
+            fixtures=SqlFixtureRepository(sessions),
+            events=SqlEventRepository(sessions),
+            request_log=SqlApiRequestLogRepository(sessions),
+            interval_seconds=config.interval_seconds,
+            quota_floor=config.quota_floor,
+        )
+        return await service.run(config.api_fixture_id)
+
+
+async def run_worker(config: WorkerConfig) -> None:
+    config.database.require_postgres()
+    if config.fixture_wait_seconds < 0:
+        raise ValueError(
+            f"fixture_wait_seconds must be >= 0, got {config.fixture_wait_seconds}"
+        )
+    if config.max_messages_per_round <= 0:
+        raise ValueError(
+            f"max_messages_per_round must be positive, got {config.max_messages_per_round}"
+        )
+
+    async with AsyncExitStack() as stack:
+        engine, sessions = create_engine_and_sessions(config.database.url)
+        stack.push_async_callback(engine.dispose)
+
+        fixtures = SqlFixtureRepository(sessions)
+        fixture = await _wait_for_fixture(
+            fixtures=fixtures,
+            api_fixture_id=config.api_fixture_id,
+            wait_seconds=config.fixture_wait_seconds,
+        )
+
+        lock_connection = await engine.connect()
+        stack.push_async_callback(lock_connection.close)
+        await _acquire_worker_lock(connection=lock_connection, fixture=fixture)
+
+        bus = PostgresListenNotifyBus(_postgres_connector(config.database.notify_dsn()))
+        await bus.start()
+        stack.push_async_callback(bus.close)
+
+        commentator_repo = SqlCommentatorRepository(sessions)
+        commentators: list[Commentator] = [
+            await commentator_repo.upsert(seed) for seed in PERSONAS
+        ]
+        rounds = GenerateCommentaryRound(
+            fixtures=fixtures,
+            events=SqlEventRepository(sessions),
+            commentary=SqlCommentaryRepository(sessions),
+            model=build_commentary_model(config.model),
+            commentators=commentators,
+            max_messages_per_round=config.max_messages_per_round,
+        )
+        worker = CommentaryWorker(bus=bus, rounds=rounds, fixture_id=fixture.id)
+        await worker.run()
+
+
+async def run_dev(config: DevConfig) -> None:
+    config.database.require_postgres()
+    async with AsyncExitStack() as stack:
+        engine, sessions = create_engine_and_sessions(config.database.url)
+        stack.push_async_callback(engine.dispose)
+
+        fixtures = SqlFixtureRepository(sessions)
+        events = SqlEventRepository(sessions)
+        commentary = SqlCommentaryRepository(sessions)
+        commentator_repo = SqlCommentatorRepository(sessions)
+
+        bus = PostgresListenNotifyBus(_postgres_connector(config.database.notify_dsn()))
+        await bus.start()
+        stack.push_async_callback(bus.close)
+
+        api = build_dev_api(config)
+        stack.push_async_callback(close_football_api, api)
+        model = build_commentary_model(config.model)
+
         commentators: list[Commentator] = [
             await commentator_repo.upsert(seed) for seed in PERSONAS
         ]
@@ -195,7 +346,7 @@ async def run_serve(config: ServeConfig) -> None:
             api=api,
             fixtures=fixtures,
             events=events,
-            request_log=request_log,
+            request_log=SqlApiRequestLogRepository(sessions),
             interval_seconds=config.interval_seconds,
             quota_floor=config.quota_floor,
         )
@@ -205,7 +356,7 @@ async def run_serve(config: ServeConfig) -> None:
             commentary=commentary,
             model=model,
             commentators=commentators,
-            max_messages_per_round=MAX_MESSAGES_PER_ROUND,
+            max_messages_per_round=config.max_messages_per_round,
         )
         worker = CommentaryWorker(bus=bus, rounds=rounds, fixture_id=fixture.id)
         stream = StreamCommentary(commentary=commentary, bus=bus)
@@ -215,7 +366,7 @@ async def run_serve(config: ServeConfig) -> None:
             commentary=commentary,
             commentators=commentator_repo,
             stream=stream,
-            sse_ping_seconds=SSE_PING_SECONDS,
+            sse_ping_seconds=config.sse_ping_seconds,
         )
         app = create_app(deps=deps, frontend_dir=config.frontend_dir)
         server = build_server(app, host=config.host, port=config.port, log_level="info")
@@ -225,11 +376,44 @@ async def run_serve(config: ServeConfig) -> None:
             worker=worker.run(),
             server=server.serve(),
         )
-    finally:
-        await bus.close()
-        if isinstance(api, HttpxFootballApi):
-            await api.aclose()
-        await engine.dispose()
+
+
+async def _wait_for_fixture(
+    *,
+    fixtures: FixtureRepository,
+    api_fixture_id: int,
+    wait_seconds: float,
+) -> Fixture:
+    deadline = asyncio.get_running_loop().time() + wait_seconds
+    while True:
+        try:
+            return await fixtures.get_by_api_fixture_id(api_fixture_id)
+        except NotFoundError as exc:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise RuntimeError(
+                    f"api-football fixture {api_fixture_id} is not prepared; "
+                    "start ingestion first or increase --fixture-wait-seconds"
+                ) from exc
+            await asyncio.sleep(min(FIXTURE_WAIT_POLL_SECONDS, remaining))
+
+
+async def _acquire_worker_lock(
+    *, connection: AsyncConnection, fixture: Fixture
+) -> None:
+    locked = await connection.scalar(
+        text("SELECT pg_try_advisory_lock(:key)"),
+        {"key": _worker_lock_key(fixture.id)},
+    )
+    if locked is not True:
+        raise RuntimeError(
+            f"commentary worker for fixture {fixture.id} "
+            f"(api-football {fixture.api_fixture_id}) is already running"
+        )
+
+
+def _worker_lock_key(fixture_id: int) -> int:
+    return (WORKER_LOCK_NAMESPACE << 32) + fixture_id
 
 
 async def run_record(*, api: FootballApi, api_fixture_id: int, output: Path) -> ReplayFile:
@@ -253,43 +437,40 @@ async def run_status(*, api: FootballApi) -> AccountStatus:
 async def run_sync_leagues(
     *, api: FootballApi, database_url: str, season: int
 ) -> LeagueSyncReport:
-    engine, sessions = create_engine_and_sessions(database_url)
-    try:
+    async with AsyncExitStack() as stack:
+        engine, sessions = create_engine_and_sessions(database_url)
+        stack.push_async_callback(engine.dispose)
         service = SyncReferenceData(
             api=api,
             reference=SqlReferenceRepository(sessions),
             fixtures=SqlFixtureRepository(sessions),
         )
         return await service.sync_leagues(season=season)
-    finally:
-        await engine.dispose()
 
 
 async def run_sync_teams(
     *, api: FootballApi, database_url: str, league_api_id: int, season: int
 ) -> TeamSyncReport:
-    engine, sessions = create_engine_and_sessions(database_url)
-    try:
+    async with AsyncExitStack() as stack:
+        engine, sessions = create_engine_and_sessions(database_url)
+        stack.push_async_callback(engine.dispose)
         service = SyncReferenceData(
             api=api,
             reference=SqlReferenceRepository(sessions),
             fixtures=SqlFixtureRepository(sessions),
         )
         return await service.sync_teams(league_api_id=league_api_id, season=season)
-    finally:
-        await engine.dispose()
 
 
 async def run_sync_fixtures(
     *, api: FootballApi, database_url: str, league_api_id: int, season: int
 ) -> FixtureSyncReport:
-    engine, sessions = create_engine_and_sessions(database_url)
-    try:
+    async with AsyncExitStack() as stack:
+        engine, sessions = create_engine_and_sessions(database_url)
+        stack.push_async_callback(engine.dispose)
         service = SyncReferenceData(
             api=api,
             reference=SqlReferenceRepository(sessions),
             fixtures=SqlFixtureRepository(sessions),
         )
         return await service.sync_fixtures(league_api_id=league_api_id, season=season)
-    finally:
-        await engine.dispose()

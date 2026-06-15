@@ -21,27 +21,30 @@ from api_football_cli.config import (
 from api_football_cli.domain.entities import AccountStatus, FixtureStatus
 from api_football_cli.main import (
     FRONTEND_DIR,
+    DevConfig,
+    IngestConfig,
     RecordError,
-    ServeConfig,
+    _wait_for_fixture,
     build_commentary_model,
-    build_serve_api,
+    build_dev_api,
+    build_ingest_api,
     run_record,
     run_status,
     serve_runtime,
 )
 from tests.factories import make_event, make_snapshot
-from tests.fakes import StubFootballApi
+from tests.fakes import InMemoryFixtureRepository, StubFootballApi
 
 DB = DatabaseConfig(url="postgresql+asyncpg://app:pw@localhost/afc")
 
 
-def make_serve_config(
+def make_dev_config(
     *,
     replay_path: Path | None,
     replay_step: int | None,
     apifootball: ApiFootballConfig | None,
-) -> ServeConfig:
-    return ServeConfig(
+) -> DevConfig:
+    return DevConfig(
         api_fixture_id=999001,
         interval_seconds=0.1,
         host="127.0.0.1",
@@ -53,6 +56,25 @@ def make_serve_config(
         replay_path=replay_path,
         replay_step_minutes=replay_step,
         frontend_dir=None,
+        sse_ping_seconds=15.0,
+        max_messages_per_round=2,
+    )
+
+
+def make_ingest_config(
+    *,
+    replay_path: Path | None,
+    replay_step: int | None,
+    apifootball: ApiFootballConfig | None,
+) -> IngestConfig:
+    return IngestConfig(
+        api_fixture_id=999001,
+        interval_seconds=0.1,
+        database=DB,
+        apifootball=apifootball,
+        quota_floor=None,
+        replay_path=replay_path,
+        replay_step_minutes=replay_step,
     )
 
 
@@ -73,22 +95,22 @@ def test_build_commentary_model_variants() -> None:
         build_commentary_model(ModelConfig(provider="anthropic", anthropic=None))
 
 
-def test_build_serve_api_replay_and_live(tmp_path: Path) -> None:
+def test_build_runtime_api_replay_and_live(tmp_path: Path) -> None:
     replay_path = tmp_path / "replay.json"
     ReplayFile(fixture=make_snapshot(), events=(make_event(),)).dump(replay_path)
 
-    replay_api = build_serve_api(
-        make_serve_config(replay_path=replay_path, replay_step=30, apifootball=None)
+    replay_api = build_dev_api(
+        make_dev_config(replay_path=replay_path, replay_step=30, apifootball=None)
     )
     assert isinstance(replay_api, FakeFootballApi)
 
     with pytest.raises(ConfigError, match="replay step"):
-        build_serve_api(
-            make_serve_config(replay_path=replay_path, replay_step=None, apifootball=None)
+        build_ingest_api(
+            make_ingest_config(replay_path=replay_path, replay_step=None, apifootball=None)
         )
 
-    live_api = build_serve_api(
-        make_serve_config(
+    live_api = build_ingest_api(
+        make_ingest_config(
             replay_path=None,
             replay_step=None,
             apifootball=ApiFootballConfig(key="k", base_url="https://api.test"),
@@ -97,7 +119,7 @@ def test_build_serve_api_replay_and_live(tmp_path: Path) -> None:
     assert isinstance(live_api, HttpxFootballApi)
 
     with pytest.raises(ConfigError, match="live mode"):
-        build_serve_api(make_serve_config(replay_path=None, replay_step=None, apifootball=None))
+        build_dev_api(make_dev_config(replay_path=None, replay_step=None, apifootball=None))
 
 
 def test_frontend_dir_ships_with_the_repo() -> None:
@@ -136,6 +158,19 @@ async def test_serve_runtime_completes_when_all_tasks_finish() -> None:
         await asyncio.sleep(0)
 
     await serve_runtime(ingestion=quick(), worker=quick(), server=quick())
+
+
+async def test_wait_for_fixture_fails_when_not_prepared() -> None:
+    fixtures = InMemoryFixtureRepository()
+    with pytest.raises(RuntimeError, match="not prepared"):
+        await _wait_for_fixture(fixtures=fixtures, api_fixture_id=1001, wait_seconds=0)
+
+
+async def test_wait_for_fixture_returns_prepared_row() -> None:
+    fixtures = InMemoryFixtureRepository()
+    created = await fixtures.upsert_snapshot(make_snapshot(api_fixture_id=1001))
+    found = await _wait_for_fixture(fixtures=fixtures, api_fixture_id=1001, wait_seconds=0)
+    assert found == created
 
 
 async def test_run_record_writes_replay_file(tmp_path: Path) -> None:
