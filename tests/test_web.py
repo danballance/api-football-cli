@@ -104,13 +104,10 @@ async def test_rest_endpoints() -> None:
         fixtures = (await client.get("/fixtures")).json()
         assert len(fixtures) == 1
         assert fixtures[0]["home"]["name"] == "Riverton Albion"
-
-        fixture = (await client.get(f"/fixtures/{harness.fixture_id}")).json()
-        assert fixture["status"] == "NS"
-        assert fixture["league"] == "Demo Premier League"
-
-        missing = await client.get("/fixtures/999")
-        assert missing.status_code == 404
+        assert fixtures[0]["away"]["name"] == "Kingsport Wanderers"
+        assert fixtures[0]["league"] == "Demo Premier League"
+        assert "status" not in fixtures[0]
+        assert "home_goals" not in fixtures[0]
 
         events = (await client.get(f"/fixtures/{harness.fixture_id}/events")).json()
         assert len(events) == 1

@@ -1,5 +1,5 @@
 // Live AI Football Commentary — React chat UI (architecture §9).
-// Commentary arrives as whole messages over SSE; the scoreboard is polled.
+// Commentary arrives as whole messages over SSE.
 
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -7,32 +7,9 @@ import htm from "htm";
 
 const html = htm.bind(React.createElement);
 
-const SCOREBOARD_POLL_MS = 10000;
-
 function fixtureIdFromUrl() {
   const param = new URLSearchParams(window.location.search).get("fixture");
   return param === null ? null : Number(param);
-}
-
-function Scoreboard({ fixture }) {
-  if (!fixture) return html`<header class="scoreboard">Waiting for fixture…</header>`;
-  const clock =
-    fixture.status === "FT" || fixture.status === "AET" || fixture.status === "PEN"
-      ? "FULL TIME"
-      : fixture.elapsed !== null
-        ? `${fixture.elapsed}'`
-        : fixture.status;
-  return html`
-    <header class="scoreboard">
-      <div class="league">${fixture.league} · ${fixture.season}</div>
-      <div class="score-row">
-        <span class="team home">${fixture.home.name}</span>
-        <span class="score">${fixture.home_goals ?? "–"} : ${fixture.away_goals ?? "–"}</span>
-        <span class="team away">${fixture.away.name}</span>
-      </div>
-      <div class="clock">${clock}</div>
-    </header>
-  `;
 }
 
 function initials(name) {
@@ -60,7 +37,6 @@ function Message({ message, commentator }) {
 }
 
 function App() {
-  const [fixture, setFixture] = useState(null);
   const [commentators, setCommentators] = useState({});
   const [messages, setMessages] = useState([]);
   const [connected, setConnected] = useState(false);
@@ -68,7 +44,6 @@ function App() {
 
   useEffect(() => {
     let eventSource = null;
-    let pollTimer = null;
     let cancelled = false;
 
     async function boot() {
@@ -82,13 +57,6 @@ function App() {
         if (cancelled || fixtures.length === 0) return;
         id = fixtures[0].id;
       }
-
-      async function refreshScoreboard() {
-        const response = await fetch(`/fixtures/${id}`);
-        if (response.ok && !cancelled) setFixture(await response.json());
-      }
-      await refreshScoreboard();
-      pollTimer = setInterval(refreshScoreboard, SCOREBOARD_POLL_MS);
 
       eventSource = new EventSource(`/fixtures/${id}/commentary/stream`);
       eventSource.addEventListener("commentary", (event) => {
@@ -105,7 +73,6 @@ function App() {
     return () => {
       cancelled = true;
       if (eventSource) eventSource.close();
-      if (pollTimer) clearInterval(pollTimer);
     };
   }, []);
 
@@ -115,7 +82,6 @@ function App() {
 
   return html`
     <div class="app">
-      <${Scoreboard} fixture=${fixture} />
       <main class="chat">
         ${messages.length === 0 &&
         html`<div class="empty">The booth is warming up — commentary will appear here.</div>`}

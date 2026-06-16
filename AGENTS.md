@@ -10,6 +10,7 @@
 ## Project setup
 
 - Python project managed with uv
+- The shell is `fish`
 - All commands must be run via uv, i.e.: `uv run $COMMAND`
 - The project uses git, but you are never required to commit anything
 - The python package is located in ./api_football_cli/

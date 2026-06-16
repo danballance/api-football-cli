@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -24,7 +24,6 @@ from api_football_cli.application.ports.repositories import (
     CommentatorRepository,
     EventRepository,
     FixtureRepository,
-    NotFoundError,
 )
 from api_football_cli.application.services.stream_commentary import StreamCommentary
 
@@ -65,14 +64,6 @@ def create_app(*, deps: WebDeps, frontend_dir: Path | None) -> FastAPI:
     async def list_fixtures(request: Request) -> list[FixtureDTO]:
         fixtures = await _deps(request).fixtures.list_all()
         return [FixtureDTO.from_domain(fixture) for fixture in fixtures]
-
-    @app.get("/fixtures/{fixture_id}")
-    async def get_fixture(request: Request, fixture_id: int) -> FixtureDTO:
-        try:
-            fixture = await _deps(request).fixtures.get(fixture_id)
-        except NotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return FixtureDTO.from_domain(fixture)
 
     @app.get("/fixtures/{fixture_id}/events")
     async def list_events(request: Request, fixture_id: int) -> list[EventDTO]:

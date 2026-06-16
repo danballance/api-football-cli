@@ -30,12 +30,8 @@ class FixtureDTO(EdgeModel):
     league: str
     season: int
     kickoff: datetime
-    status: str
-    elapsed: int | None
     home: TeamDTO
     away: TeamDTO
-    home_goals: int | None
-    away_goals: int | None
 
     @classmethod
     def from_domain(cls, fixture: Fixture) -> FixtureDTO:
@@ -45,12 +41,8 @@ class FixtureDTO(EdgeModel):
             league=fixture.league.name,
             season=fixture.league.season,
             kickoff=fixture.kickoff,
-            status=fixture.status.value,
-            elapsed=fixture.elapsed,
             home=TeamDTO(id=fixture.home.id, name=fixture.home.name),
             away=TeamDTO(id=fixture.away.id, name=fixture.away.name),
-            home_goals=fixture.home_goals,
-            away_goals=fixture.away_goals,
         )
 
 

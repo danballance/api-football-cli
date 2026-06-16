@@ -81,7 +81,6 @@ The dev process keeps serving the UI after full time; stop it with Ctrl+C.
 | Endpoint | Description |
 |---|---|
 | `GET /fixtures` | Fixtures in the database |
-| `GET /fixtures/{id}` | Scoreboard: status, elapsed, score |
 | `GET /fixtures/{id}/events` | The append-only event log, rendered |
 | `GET /fixtures/{id}/commentary?after_id=0` | Commentary history |
 | `GET /fixtures/{id}/commentary/stream` | SSE: catch-up then live push |
@@ -112,5 +111,5 @@ Live ingestion creates minimal league/team rows on its own; sync enriches them.
 ## The Frontend
 
 `frontend/` is a no-build React app served as static files by FastAPI on the same origin. It
-picks the first fixture from `/fixtures` (override with `/?fixture=<id>`), opens the SSE stream,
-and polls the scoreboard every 10 seconds.
+picks the first fixture from `/fixtures` (override with `/?fixture=<id>`) and opens the SSE
+stream for commentary.

@@ -30,58 +30,6 @@ body {
   flex-direction: column;
 }
 
-.scoreboard {
-  position: sticky;
-  top: 0;
-  background: linear-gradient(180deg, var(--panel-2), var(--panel));
-  border-bottom: 1px solid #2a3342;
-  padding: 1rem 1.25rem;
-  text-align: center;
-  z-index: 10;
-}
-
-.scoreboard .league {
-  color: var(--muted);
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.score-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 1rem;
-  margin: 0.4rem 0;
-}
-
-.score-row .team {
-  font-weight: 600;
-  font-size: 1.1rem;
-  flex: 1;
-}
-
-.score-row .home {
-  text-align: right;
-}
-
-.score-row .away {
-  text-align: left;
-}
-
-.score-row .score {
-  font-size: 1.9rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: #fff;
-}
-
-.clock {
-  color: var(--live);
-  font-weight: 700;
-  font-size: 0.9rem;
-}
-
 .chat {
   flex: 1;
   padding: 1.25rem;
