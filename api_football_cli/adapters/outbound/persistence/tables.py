@@ -174,4 +174,4 @@ class ApiRequestLogRow(Base):
     id: Mapped[int] = mapped_column(BigIntPK, primary_key=True)
     endpoint: Mapped[str] = mapped_column(String(120))
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    requests_remaining: Mapped[int | None] = mapped_column(Integer)
+    requests_remaining: Mapped[int] = mapped_column(Integer)

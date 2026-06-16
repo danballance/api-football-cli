@@ -197,7 +197,7 @@ def upgrade() -> None:
         _id_column(),
         sa.Column("endpoint", sa.String(120), nullable=False),
         sa.Column("ts", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("requests_remaining", sa.Integer(), nullable=True),
+        sa.Column("requests_remaining", sa.Integer(), nullable=False),
     )
 
     if _is_postgres():

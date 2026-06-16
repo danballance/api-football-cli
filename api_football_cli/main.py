@@ -17,7 +17,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from api_football_cli.adapters.inbound.web.app import WebDeps, create_app
-from api_football_cli.adapters.outbound.apifootball.fake import FakeFootballApi, ReplayFile
 from api_football_cli.adapters.outbound.apifootball.http import HttpxFootballApi
 from api_football_cli.adapters.outbound.messaging.postgres import (
     NotifyConnection,
@@ -56,7 +55,6 @@ from api_football_cli.config import (
     ModelConfig,
 )
 from api_football_cli.domain.entities import (
-    TERMINAL_STATUSES,
     AccountStatus,
     Commentator,
     Fixture,
@@ -75,10 +73,6 @@ WORKER_LOCK_NAMESPACE = 0x0AFC
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
 
-class RecordError(RuntimeError):
-    """Raised when a fixture cannot be recorded for replay."""
-
-
 class WebConfig(FrozenModel):
     host: str
     port: int
@@ -91,10 +85,8 @@ class IngestConfig(FrozenModel):
     api_fixture_id: int
     interval_seconds: float
     database: DatabaseConfig
-    apifootball: ApiFootballConfig | None
-    quota_floor: int | None
-    replay_path: Path | None
-    replay_step_minutes: int | None
+    apifootball: ApiFootballConfig
+    quota_floor: int
 
 
 class WorkerConfig(FrozenModel):
@@ -112,10 +104,8 @@ class DevConfig(FrozenModel):
     port: int
     database: DatabaseConfig
     model: ModelConfig
-    apifootball: ApiFootballConfig | None
-    quota_floor: int | None
-    replay_path: Path | None
-    replay_step_minutes: int | None
+    apifootball: ApiFootballConfig
+    quota_floor: int
     frontend_dir: Path | None
     sse_ping_seconds: float
     max_messages_per_round: int
@@ -139,45 +129,6 @@ def build_live_api(config: ApiFootballConfig) -> HttpxFootballApi:
         api_key=config.key,
         base_url=config.base_url,
         http_client=httpx.AsyncClient(timeout=httpx.Timeout(30.0)),
-    )
-
-
-def build_replay_api(*, replay_path: Path, step_minutes: int) -> FakeFootballApi:
-    return FakeFootballApi(
-        replay=ReplayFile.load(replay_path), minutes_per_poll=step_minutes
-    )
-
-
-def build_fixture_api(
-    *,
-    replay_path: Path | None,
-    replay_step_minutes: int | None,
-    apifootball: ApiFootballConfig | None,
-) -> FootballApi:
-    if replay_path is not None:
-        if replay_step_minutes is None:
-            raise ConfigError("replay mode requires an explicit replay step")
-        return build_replay_api(
-            replay_path=replay_path, step_minutes=replay_step_minutes
-        )
-    if apifootball is None:
-        raise ConfigError("live mode requires api-football configuration")
-    return build_live_api(apifootball)
-
-
-def build_ingest_api(config: IngestConfig) -> FootballApi:
-    return build_fixture_api(
-        replay_path=config.replay_path,
-        replay_step_minutes=config.replay_step_minutes,
-        apifootball=config.apifootball,
-    )
-
-
-def build_dev_api(config: DevConfig) -> FootballApi:
-    return build_fixture_api(
-        replay_path=config.replay_path,
-        replay_step_minutes=config.replay_step_minutes,
-        apifootball=config.apifootball,
     )
 
 
@@ -256,7 +207,7 @@ async def run_ingest(config: IngestConfig) -> Fixture:
         engine, sessions = create_engine_and_sessions(config.database.url)
         stack.push_async_callback(engine.dispose)
 
-        api = build_ingest_api(config)
+        api = build_live_api(config.apifootball)
         stack.push_async_callback(close_football_api, api)
 
         service = IngestFixtureEvents(
@@ -331,7 +282,7 @@ async def run_dev(config: DevConfig) -> None:
         await bus.start()
         stack.push_async_callback(bus.close)
 
-        api = build_dev_api(config)
+        api = build_live_api(config.apifootball)
         stack.push_async_callback(close_football_api, api)
         model = build_commentary_model(config.model)
 
@@ -414,20 +365,6 @@ async def _acquire_worker_lock(
 
 def _worker_lock_key(fixture_id: int) -> int:
     return (WORKER_LOCK_NAMESPACE << 32) + fixture_id
-
-
-async def run_record(*, api: FootballApi, api_fixture_id: int, output: Path) -> ReplayFile:
-    """Record a finished fixture into a replay file (architecture §10)."""
-    snapshot = await api.fixture(api_fixture_id)
-    if snapshot.status not in TERMINAL_STATUSES:
-        raise RecordError(
-            f"fixture {api_fixture_id} has status {snapshot.status.value!r}; "
-            "only finished fixtures can be recorded for replay"
-        )
-    events = await api.fixtures_events(api_fixture_id)
-    replay = ReplayFile(fixture=snapshot, events=tuple(events))
-    replay.dump(output)
-    return replay
 
 
 async def run_status(*, api: FootballApi) -> AccountStatus:

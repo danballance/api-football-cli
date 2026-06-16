@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 
+from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -20,6 +21,14 @@ def _database_url() -> str:
     if url is None or url.strip() == "":
         raise RuntimeError("environment variable AFC_DATABASE_URL must be set for migrations")
     return url
+
+
+def _is_sqlite_aiosqlite(url: str) -> bool:
+    return url.startswith("sqlite+aiosqlite://")
+
+
+def _sync_sqlite_url(url: str) -> str:
+    return url.replace("sqlite+aiosqlite://", "sqlite://", 1)
 
 
 def run_migrations_offline() -> None:
@@ -40,7 +49,15 @@ def _run_sync_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    engine = create_async_engine(_database_url())
+    url = _database_url()
+    if _is_sqlite_aiosqlite(url):
+        engine = create_engine(_sync_sqlite_url(url))
+        with engine.connect() as connection:
+            _run_sync_migrations(connection)
+        engine.dispose()
+        return
+
+    engine = create_async_engine(url)
     async with engine.connect() as connection:
         await connection.run_sync(_run_sync_migrations)
         await connection.commit()

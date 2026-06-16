@@ -21,7 +21,7 @@ from tests.fakes import (
 def build_service(
     api: StubFootballApi,
     *,
-    quota_floor: int | None,
+    quota_floor: int,
 ) -> tuple[
     IngestFixtureEvents, InMemoryFixtureRepository, InMemoryEventRepository, InMemoryRequestLog
 ]:
@@ -74,16 +74,21 @@ async def test_quota_floor_fails_fast() -> None:
     assert log.records == [("fixtures+fixtures/events", 3)]
 
 
-async def test_unknown_quota_skips_the_floor_check() -> None:
+async def test_negative_quota_floor_rejected() -> None:
     api = StubFootballApi(
-        snapshots=[make_snapshot(status=FixtureStatus.FULL_TIME, elapsed=90)],
-        event_batches=[[]],
-        remaining=None,
+        snapshots=[],
+        event_batches=[],
+        remaining=10,
     )
-    service, _, _, log = build_service(api, quota_floor=5)
-    fixture = await service.run(1001)
-    assert fixture.status is FixtureStatus.FULL_TIME
-    assert log.records == [("fixtures+fixtures/events", None)]
+    with pytest.raises(ValueError, match="quota_floor"):
+        IngestFixtureEvents(
+            api=api,
+            fixtures=InMemoryFixtureRepository(),
+            events=InMemoryEventRepository(bus=None),
+            request_log=InMemoryRequestLog(),
+            interval_seconds=0,
+            quota_floor=-1,
+        )
 
 
 def test_negative_interval_rejected() -> None:
@@ -95,5 +100,5 @@ def test_negative_interval_rejected() -> None:
             events=InMemoryEventRepository(bus=None),
             request_log=InMemoryRequestLog(),
             interval_seconds=-1,
-            quota_floor=None,
+            quota_floor=0,
         )

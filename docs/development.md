@@ -13,7 +13,7 @@ api_football_cli/
   adapters/
     inbound/web/      FastAPI routers, edge DTOs, hand-rolled SSE
     inbound/cli/      typer commands (afc)
-    outbound/apifootball/   HttpxFootballApi + FakeFootballApi (replay)
+    outbound/apifootball/   HttpxFootballApi
     outbound/persistence/   SQLAlchemy 2.0 tables + repositories
     outbound/messaging/     PostgresListenNotifyBus + InMemoryBus
     outbound/model/         AnthropicCommentaryModel + FakeModel
@@ -21,7 +21,6 @@ api_football_cli/
   main.py             composition root: split process wiring + local dev supervisor
 alembic/              migrations (incl. the pg_notify triggers)
 frontend/             no-build React chat UI
-examples/             replay-demo.json (feeds tests, demos and the quickstart)
 tests/                function-based pytest suite
 ```
 
@@ -57,14 +56,14 @@ Everything runs with no network, no Postgres and no model spend:
   event stream.
 - **CLI** — `typer.testing.CliRunner` with the process composition functions monkeypatched; the
   `afc db upgrade` test runs the real Alembic migration against a SQLite file.
-- **Pipeline** — `tests/test_pipeline.py` replays the shipped demo end-to-end:
-  ingest → notifications → rounds → stream.
+- **Pipeline** — `tests/test_pipeline.py` drives the full path end-to-end with scripted API
+  snapshots and event batches: ingest → notifications → rounds → stream.
 
 The "no Postgres requirement" applies only to the unit test suite. The split runtime
 entrypoints (`main.run_web`, `main.run_ingest`, `main.run_worker`, and `main.run_dev`)
-require a live Postgres instance when doing end-to-end verification or manual replay
-verification outside of unit tests. The unit suite covers their builders, service boundaries,
-CLI wiring, and the local TaskGroup supervisor.
+require a live Postgres instance when doing end-to-end verification outside of unit tests.
+The unit suite covers their builders, service boundaries, CLI wiring, and the local TaskGroup
+supervisor.
 
 ## Deliberate implementation choices (vs. the architecture doc)
 
@@ -73,8 +72,7 @@ CLI wiring, and the local TaskGroup supervisor.
   no framework state, deterministic under test. The doc only *recommends* sse-starlette.
 - **Terminal statuses** include the administrative endings (PST/CANC/ABD/AWD/WO) on top of
   the doc's {FT, AET, PEN} — polling those would never terminate either.
-- **`afc record` and `afc status`** are small additions: record produces the replay files the
-  doc's replay mode consumes; status is the doc's suggested preflight (§2).
+- **`afc status`** is a small addition: it is the suggested preflight (§2).
 - **Postgres ids** are `BIGINT GENERATED ALWAYS AS IDENTITY` via the migration; on SQLite
   (tests only) plain autoincrement integers.
 - The api-football **base URL is a code constant** (`config.API_FOOTBALL_BASE_URL`), not an

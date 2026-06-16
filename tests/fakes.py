@@ -238,9 +238,9 @@ class InMemoryReferenceRepository:
 
 class InMemoryRequestLog:
     def __init__(self) -> None:
-        self.records: list[tuple[str, int | None]] = []
+        self.records: list[tuple[str, int]] = []
 
-    async def record(self, *, endpoint: str, requests_remaining: int | None) -> None:
+    async def record(self, *, endpoint: str, requests_remaining: int) -> None:
         self.records.append((endpoint, requests_remaining))
 
 
@@ -296,7 +296,9 @@ class StubFootballApi:
             raise ApiFootballError("stub has no account status")
         return self._status
 
-    def requests_remaining(self) -> int | None:
+    def requests_remaining(self) -> int:
+        if self._remaining is None:
+            raise ApiFootballError("stub has no remaining quota")
         return self._remaining
 
 

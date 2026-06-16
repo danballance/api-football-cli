@@ -257,12 +257,12 @@ async def test_minimal_league_enriched_by_reference_sync(sessions: SessionFactor
 async def test_request_log_records(sessions: SessionFactory) -> None:
     log = SqlApiRequestLogRepository(sessions)
     await log.record(endpoint="fixtures", requests_remaining=41)
-    await log.record(endpoint="fixtures", requests_remaining=None)
+    await log.record(endpoint="fixtures", requests_remaining=17)
     async with sessions() as session:
         rows = (await session.scalars(select(ApiRequestLogRow))).all()
         assert [(r.endpoint, r.requests_remaining) for r in rows] == [
             ("fixtures", 41),
-            ("fixtures", None),
+            ("fixtures", 17),
         ]
 
 

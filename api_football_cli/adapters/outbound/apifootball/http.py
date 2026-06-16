@@ -44,7 +44,11 @@ class HttpxFootballApi(FootballApi):  # noqa: F821
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    def requests_remaining(self) -> int | None:
+    def requests_remaining(self) -> int:
+        if self._requests_remaining is None:
+            raise ApiFootballError(
+                f"api-football response did not include {REMAINING_HEADER!r}"
+            )
         return self._requests_remaining
 
     async def _get(self, path: str, params: dict[str, str | int]) -> object:
@@ -58,9 +62,15 @@ class HttpxFootballApi(FootballApi):  # noqa: F821
             raise ApiFootballError(
                 f"GET {path} returned HTTP {response.status_code}: {response.text[:300]}"
             )
-        remaining = response.headers.get(REMAINING_HEADER)
-        if remaining is not None:
-            self._requests_remaining = int(remaining)
+        raw_remaining = response.headers.get(REMAINING_HEADER)
+        if raw_remaining is None:
+            raise ApiFootballError(f"GET {path} missing {REMAINING_HEADER!r} header")
+        try:
+            self._requests_remaining = int(raw_remaining)
+        except ValueError as exc:
+            raise ApiFootballError(
+                f"GET {path} returned invalid {REMAINING_HEADER!r}: {raw_remaining!r}"
+            ) from exc
 
         payload = response.json()
         if not isinstance(payload, dict):

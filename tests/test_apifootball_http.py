@@ -12,6 +12,7 @@ from api_football_cli.application.ports.football_api import ApiFootballError
 from api_football_cli.domain.entities import FixtureStatus
 
 BASE_URL = "https://api.test"
+QUOTA_HEADERS = {"x-ratelimit-requests-remaining": "42"}
 
 FIXTURE_ITEM = {
     "fixture": {
@@ -161,7 +162,7 @@ async def test_fixture_parses_and_tracks_quota_and_sends_key() -> None:
 
 async def test_fixture_requires_exactly_one_item() -> None:
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(200, json=envelope([]))
+        lambda request: httpx.Response(200, json=envelope([]), headers=QUOTA_HEADERS)
     )
     api = make_api(transport)
     with pytest.raises(ApiFootballError, match="exactly one fixture"):
@@ -171,7 +172,9 @@ async def test_fixture_requires_exactly_one_item() -> None:
 async def test_errors_inside_http_200_raise() -> None:
     payload = envelope([])
     payload["errors"] = {"token": "Error/Missing application key."}
-    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json=payload, headers=QUOTA_HEADERS)
+    )
     api = make_api(transport)
     with pytest.raises(ApiFootballError, match="Missing application key"):
         await api.fixture(1001)
@@ -188,7 +191,7 @@ async def test_non_200_raises() -> None:
 
 async def test_non_object_payload_raises() -> None:
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(200, content=json.dumps([1, 2]))
+        lambda request: httpx.Response(200, content=json.dumps([1, 2]), headers=QUOTA_HEADERS)
     )
     api = make_api(transport)
     with pytest.raises(ApiFootballError, match="non-object"):
@@ -197,7 +200,7 @@ async def test_non_object_payload_raises() -> None:
 
 async def test_non_list_response_field_raises() -> None:
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(200, json=envelope("nope"))
+        lambda request: httpx.Response(200, json=envelope("nope"), headers=QUOTA_HEADERS)
     )
     api = make_api(transport)
     with pytest.raises(ApiFootballError, match="unexpected 'response'"):
@@ -206,7 +209,11 @@ async def test_non_list_response_field_raises() -> None:
 
 async def test_shape_mismatch_raises() -> None:
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(200, json=envelope([{"time": {"elapsed": 9}}]))
+        lambda request: httpx.Response(
+            200,
+            json=envelope([{"time": {"elapsed": 9}}]),
+            headers=QUOTA_HEADERS,
+        )
     )
     api = make_api(transport)
     with pytest.raises(ApiFootballError, match="unexpected shape"):
@@ -217,13 +224,29 @@ async def test_events_leagues_teams_and_league_fixtures_parse() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path == "/fixtures/events":
-            return httpx.Response(200, json=envelope([EVENT_ITEM]))
+            return httpx.Response(
+                200,
+                json=envelope([EVENT_ITEM]),
+                headers={"x-ratelimit-requests-remaining": "41"},
+            )
         if path == "/leagues":
-            return httpx.Response(200, json=envelope([LEAGUE_ITEM]))
+            return httpx.Response(
+                200,
+                json=envelope([LEAGUE_ITEM]),
+                headers={"x-ratelimit-requests-remaining": "40"},
+            )
         if path == "/teams":
-            return httpx.Response(200, json=envelope([TEAM_ITEM]))
+            return httpx.Response(
+                200,
+                json=envelope([TEAM_ITEM]),
+                headers={"x-ratelimit-requests-remaining": "39"},
+            )
         if path == "/fixtures":
-            return httpx.Response(200, json=envelope([FIXTURE_ITEM]))
+            return httpx.Response(
+                200,
+                json=envelope([FIXTURE_ITEM]),
+                headers={"x-ratelimit-requests-remaining": "38"},
+            )
         raise AssertionError(f"unexpected path {path}")
 
     api = make_api(httpx.MockTransport(handler))
@@ -247,7 +270,11 @@ async def test_events_leagues_teams_and_league_fixtures_parse() -> None:
 
 async def test_account_status_parses_object_response() -> None:
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(200, json=envelope(STATUS_RESPONSE))
+        lambda request: httpx.Response(
+            200,
+            json=envelope(STATUS_RESPONSE),
+            headers={"x-ratelimit-requests-remaining": "37"},
+        )
     )
     api = make_api(transport)
     status = await api.account_status()
@@ -259,8 +286,34 @@ async def test_account_status_parses_object_response() -> None:
 
 async def test_account_status_shape_mismatch_raises() -> None:
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(200, json=envelope({"unexpected": True}))
+        lambda request: httpx.Response(
+            200,
+            json=envelope({"unexpected": True}),
+            headers={"x-ratelimit-requests-remaining": "37"},
+        )
     )
     api = make_api(transport)
     with pytest.raises(ApiFootballError, match="/status"):
         await api.account_status()
+
+
+async def test_missing_quota_header_raises() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json=envelope([FIXTURE_ITEM]))
+    )
+    api = make_api(transport)
+    with pytest.raises(ApiFootballError, match="x-ratelimit-requests-remaining"):
+        await api.fixture(1001)
+
+
+async def test_invalid_quota_header_raises() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json=envelope([FIXTURE_ITEM]),
+            headers={"x-ratelimit-requests-remaining": "many"},
+        )
+    )
+    api = make_api(transport)
+    with pytest.raises(ApiFootballError, match="invalid"):
+        await api.fixture(1001)

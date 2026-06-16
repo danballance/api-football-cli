@@ -34,6 +34,6 @@ class FootballApi(Protocol):
 
     async def account_status(self) -> AccountStatus: ...
 
-    def requests_remaining(self) -> int | None:
-        """Daily quota left per the most recent response; None when unknown."""
+    def requests_remaining(self) -> int:
+        """Daily quota left per the most recent response."""
         ...

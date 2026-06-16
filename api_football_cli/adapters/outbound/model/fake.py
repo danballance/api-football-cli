@@ -1,4 +1,4 @@
-"""FakeModel: deterministic CommentaryModel for tests and offline demos."""
+"""FakeModel: deterministic CommentaryModel for tests."""
 
 from __future__ import annotations
 
