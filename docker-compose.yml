@@ -92,23 +92,9 @@ services:
       - -c
       - |
         uv sync --frozen
-
-        if [ "${AFC_RUN_MODE:?set AFC_RUN_MODE in .env}" = "replay" ]; then
-          exec uv run afc ingest \
-            --fixture "${AFC_FIXTURE_ID:?set AFC_FIXTURE_ID in .env}" \
-            --interval "${AFC_POLL_INTERVAL_SECONDS:?set AFC_POLL_INTERVAL_SECONDS in .env}" \
-            --replay "${AFC_REPLAY_PATH:?set AFC_REPLAY_PATH in .env}" \
-            --replay-step "${AFC_REPLAY_STEP_MINUTES:?set AFC_REPLAY_STEP_MINUTES in .env}"
-        fi
-
-        if [ "${AFC_RUN_MODE:?set AFC_RUN_MODE in .env}" = "live" ]; then
-          exec uv run afc ingest \
-            --fixture "${AFC_FIXTURE_ID:?set AFC_FIXTURE_ID in .env}" \
-            --interval "${AFC_POLL_INTERVAL_SECONDS:?set AFC_POLL_INTERVAL_SECONDS in .env}"
-        fi
-
-        echo "error: AFC_RUN_MODE must be 'replay' or 'live', got '${AFC_RUN_MODE:?set AFC_RUN_MODE in .env}'" >&2
-        exit 1
+        exec uv run afc ingest \
+          --fixture "${AFC_FIXTURE_ID:?set AFC_FIXTURE_ID in .env}" \
+          --interval "${AFC_POLL_INTERVAL_SECONDS:?set AFC_POLL_INTERVAL_SECONDS in .env}"
 
   commentary-worker:
     image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim
