@@ -60,10 +60,11 @@ Everything runs with no network, no Postgres and no model spend:
 - **Pipeline** — `tests/test_pipeline.py` replays the shipped demo end-to-end:
   ingest → notifications → rounds → stream.
 
-The split runtime entrypoints (`main.run_web`, `main.run_ingest`, `main.run_worker`, and
-`main.run_dev`) need a live Postgres for end-to-end verification. The unit suite covers their
-builders, service boundaries, CLI wiring, and the local TaskGroup supervisor; use a disposable
-Postgres for manual replay verification.
+The "no Postgres requirement" applies only to the unit test suite. The split runtime
+entrypoints (`main.run_web`, `main.run_ingest`, `main.run_worker`, and `main.run_dev`)
+require a live Postgres instance when doing end-to-end verification or manual replay
+verification outside of unit tests. The unit suite covers their builders, service boundaries,
+CLI wiring, and the local TaskGroup supervisor.
 
 ## Deliberate implementation choices (vs. the architecture doc)
 
