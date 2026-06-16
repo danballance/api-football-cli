@@ -1,8 +1,7 @@
 """IngestFixtureEvents: the polling loop (architecture §6).
 
-Live and replay share this body — only the FootballApi adapter differs.
-Ingestion knows nothing about commentary or the browser; it keeps the DB
-current and reactivity flows from insert → NOTIFY (Postgres trigger).
+    Ingestion knows nothing about commentary or the browser; it keeps the DB
+    current and reactivity flows from insert → NOTIFY (Postgres trigger).
 """
 
 from __future__ import annotations
@@ -33,10 +32,12 @@ class IngestFixtureEvents:
         events: EventRepository,
         request_log: ApiRequestLogRepository,
         interval_seconds: float,
-        quota_floor: int | None,
+        quota_floor: int,
     ) -> None:
         if interval_seconds < 0:
             raise ValueError(f"interval_seconds must be >= 0, got {interval_seconds}")
+        if quota_floor < 0:
+            raise ValueError(f"quota_floor must be >= 0, got {quota_floor}")
         self._api = api
         self._fixtures = fixtures
         self._events = events
@@ -56,11 +57,7 @@ class IngestFixtureEvents:
         await self._request_log.record(
             endpoint=POLL_ENDPOINT_LABEL, requests_remaining=remaining
         )
-        if (
-            self._quota_floor is not None
-            and remaining is not None
-            and remaining <= self._quota_floor
-        ):
+        if remaining <= self._quota_floor:
             raise QuotaExhaustedError(
                 f"api-football daily quota at {remaining} requests "
                 f"(floor {self._quota_floor}); stopping before it runs out"

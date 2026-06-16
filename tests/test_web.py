@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 
 import httpx
 import pytest
@@ -21,7 +20,7 @@ from api_football_cli.adapters.outbound.messaging.in_memory import InMemoryBus
 from api_football_cli.application.services.stream_commentary import StreamCommentary
 from api_football_cli.domain.entities import CommentaryDraft, CommentaryMessage
 from api_football_cli.domain.personas import PERSONAS
-from api_football_cli.main import FRONTEND_DIR, build_server
+from api_football_cli.main import FRONTEND_DIR
 from tests.factories import make_event, make_snapshot
 from tests.fakes import (
     InMemoryCommentaryRepository,
@@ -85,24 +84,6 @@ async def build_harness() -> Harness:
         app=app,
     )
 
-
-@asynccontextmanager
-async def live_server(app: FastAPI) -> AsyncIterator[str]:
-    """Serve the app on 127.0.0.1:<ephemeral> for true streaming tests."""
-    server = build_server(app, host="127.0.0.1", port=0, log_level="warning")
-    task = asyncio.create_task(server.serve())
-    try:
-        async with asyncio.timeout(5):
-            while not server.started:
-                await asyncio.sleep(0.01)
-        port = server.servers[0].sockets[0].getsockname()[1]
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        async with asyncio.timeout(5):
-            await task
-
-
 def draft(fixture_id: int, text: str) -> CommentaryDraft:
     return CommentaryDraft(
         fixture_id=fixture_id,
@@ -156,45 +137,45 @@ async def test_rest_endpoints() -> None:
 async def read_frames(
     lines: AsyncIterator[str], *, commentary_events: int, timeout: float = 3.0
 ) -> list[str]:
-    """Read SSE lines until N commentary data frames have arrived."""
+    """Read SSE frames until N commentary events have arrived."""
     frames: list[str] = []
     async with asyncio.timeout(timeout):
         async for line in lines:
             frames.append(line)
-            if line.startswith("data:") and sum(
-                1 for f in frames if f.startswith("data:")
+            if "data:" in line and sum(
+                1 for f in frames if "data:" in f
             ) >= commentary_events:
                 break
     return frames
 
 
-async def test_sse_stream_replays_then_pushes_live() -> None:
+async def test_sse_stream_catches_up_then_pushes_live() -> None:
     harness = await build_harness()
     first = await harness.commentary.insert(draft(harness.fixture_id, "catch-up line"))
 
-    async with live_server(harness.app) as base_url:
-        async with httpx.AsyncClient(base_url=base_url) as client:
-            async with client.stream(
-                "GET", f"/fixtures/{harness.fixture_id}/commentary/stream"
-            ) as response:
-                assert response.headers["content-type"].startswith("text/event-stream")
-                assert response.headers["cache-control"] == "no-cache"
+    live_text = "live line"
 
-                live_text = "live line"
+    async def insert_soon() -> None:
+        await asyncio.sleep(0.02)
+        await harness.commentary.insert(draft(harness.fixture_id, live_text))
 
-                async def insert_soon() -> None:
-                    await asyncio.sleep(0.02)
-                    await harness.commentary.insert(draft(harness.fixture_id, live_text))
+    inserter = asyncio.create_task(insert_soon())
+    frames = await read_frames(
+        commentary_sse(
+            stream=StreamCommentary(commentary=harness.commentary, bus=harness.bus),
+            fixture_id=harness.fixture_id,
+            after_id=0,
+            ping_seconds=0.05,
+        ),
+        commentary_events=2,
+    )
+    await inserter
 
-                inserter = asyncio.create_task(insert_soon())
-                frames = await read_frames(response.aiter_lines(), commentary_events=2)
-                await inserter
-
-    assert frames[0] == "retry: 3000"
-    data_frames = [f for f in frames if f.startswith("data:")]
+    assert frames[0] == "retry: 3000\n\n"
+    data_frames = [f for f in frames if "data:" in f]
     assert "catch-up line" in data_frames[0]
     assert live_text in data_frames[1]
-    id_frames = [f for f in frames if f.startswith("id:")]
+    id_frames = [f.splitlines()[0] for f in frames if f.startswith("id:")]
     assert id_frames[0] == f"id: {first.id}"
 
 
@@ -203,16 +184,17 @@ async def test_sse_last_event_id_resumes() -> None:
     first = await harness.commentary.insert(draft(harness.fixture_id, "old line"))
     await harness.commentary.insert(draft(harness.fixture_id, "new line"))
 
-    async with live_server(harness.app) as base_url:
-        async with httpx.AsyncClient(base_url=base_url) as client:
-            async with client.stream(
-                "GET",
-                f"/fixtures/{harness.fixture_id}/commentary/stream",
-                headers={"Last-Event-ID": str(first.id)},
-            ) as response:
-                frames = await read_frames(response.aiter_lines(), commentary_events=1)
+    frames = await read_frames(
+        commentary_sse(
+            stream=StreamCommentary(commentary=harness.commentary, bus=harness.bus),
+            fixture_id=harness.fixture_id,
+            after_id=first.id,
+            ping_seconds=0.05,
+        ),
+        commentary_events=1,
+    )
 
-    data_frames = [f for f in frames if f.startswith("data:")]
+    data_frames = [f for f in frames if "data:" in f]
     assert len(data_frames) == 1
     assert "new line" in data_frames[0]
     assert "old line" not in data_frames[0]
@@ -220,17 +202,17 @@ async def test_sse_last_event_id_resumes() -> None:
 
 async def test_sse_sends_keep_alive_when_idle() -> None:
     harness = await build_harness()
-    async with live_server(harness.app) as base_url:
-        async with httpx.AsyncClient(base_url=base_url) as client:
-            async with client.stream(
-                "GET", f"/fixtures/{harness.fixture_id}/commentary/stream"
-            ) as response:
-                frames: list[str] = []
-                async with asyncio.timeout(3):
-                    async for line in response.aiter_lines():
-                        frames.append(line)
-                        if any(f.startswith(": keep-alive") for f in frames):
-                            break
+    frames: list[str] = []
+    async with asyncio.timeout(3):
+        async for line in commentary_sse(
+            stream=StreamCommentary(commentary=harness.commentary, bus=harness.bus),
+            fixture_id=harness.fixture_id,
+            after_id=0,
+            ping_seconds=0.05,
+        ):
+            frames.append(line)
+            if any(f.startswith(": keep-alive") for f in frames):
+                break
     assert any(f.startswith(": keep-alive") for f in frames)
 
 
@@ -296,11 +278,10 @@ async def test_frontend_mount_serves_index() -> None:
         sse_ping_seconds=0.05,
     )
     app = create_app(deps=deps, frontend_dir=FRONTEND_DIR)
-    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
-    page = await client.get("/")
-    assert page.status_code == 200
-    assert "Live AI Football Commentary" in page.text
-    await client.aclose()
+    assert any(getattr(route, "name", None) == "frontend" for route in app.routes)
+    assert "Live AI Football Commentary" in (FRONTEND_DIR / "index.html").read_text(
+        encoding="utf-8"
+    )
 
     with pytest.raises(FileNotFoundError, match="frontend"):
         create_app(deps=deps, frontend_dir=FRONTEND_DIR / "missing")

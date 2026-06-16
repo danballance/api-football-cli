@@ -19,7 +19,6 @@ from alembic import command as alembic_command
 from api_football_cli import main as composition
 from api_football_cli.application.ports.football_api import FootballApi
 from api_football_cli.config import (
-    ApiFootballConfig,
     ConfigError,
     load_apifootball_config,
     load_database_config,
@@ -47,25 +46,6 @@ def _run[ResultT](coro: Coroutine[None, None, ResultT]) -> ResultT:
 def _config_error(message: str) -> typer.Exit:
     typer.secho(f"error: {message}", fg=typer.colors.RED, err=True)
     return typer.Exit(code=1)
-
-
-def _runtime_api_config(
-    *,
-    replay: Path | None,
-    replay_step: int | None,
-    quota_floor: int | None,
-) -> ApiFootballConfig | None:
-    if replay is not None:
-        if replay_step is None:
-            raise ConfigError("--replay requires --replay-step (minutes per poll)")
-        if quota_floor is not None:
-            raise ConfigError("--quota-floor is live-mode only")
-        return None
-    if replay_step is not None:
-        raise ConfigError("--replay-step requires --replay")
-    if quota_floor is None:
-        raise ConfigError("live mode requires --quota-floor")
-    return load_apifootball_config()
 
 
 async def _run_and_close_api[ResultT](
@@ -105,31 +85,18 @@ def ingest(
     interval: Annotated[
         float, typer.Option(help="Seconds between polls (recommend 15-30 live).")
     ],
-    replay: Annotated[
-        Path | None,
-        typer.Option(help="Replay file (from `afc record`); omit for live polling."),
-    ] = None,
-    replay_step: Annotated[
-        int | None,
-        typer.Option(help="Simulated match minutes advanced per poll (replay mode)."),
-    ] = None,
     quota_floor: Annotated[
-        int | None,
-        typer.Option(help="Stop before the daily quota drops to this value (live mode)."),
-    ] = None,
+        int, typer.Option(help="Stop before the daily quota drops to this value.")
+    ],
 ) -> None:
-    """Poll live/replay fixture data into Postgres."""
+    """Poll live fixture data into Postgres."""
     try:
         config = composition.IngestConfig(
             api_fixture_id=fixture,
             interval_seconds=interval,
             database=load_database_config(),
-            apifootball=_runtime_api_config(
-                replay=replay, replay_step=replay_step, quota_floor=quota_floor
-            ),
+            apifootball=load_apifootball_config(),
             quota_floor=quota_floor,
-            replay_path=replay,
-            replay_step_minutes=replay_step,
         )
     except ConfigError as exc:
         raise _config_error(str(exc)) from exc
@@ -180,18 +147,9 @@ def dev(
     max_messages_per_round: Annotated[
         int, typer.Option(help="Maximum commentary messages produced per event round.")
     ],
-    replay: Annotated[
-        Path | None,
-        typer.Option(help="Replay file (from `afc record`); omit for live polling."),
-    ] = None,
-    replay_step: Annotated[
-        int | None,
-        typer.Option(help="Simulated match minutes advanced per poll (replay mode)."),
-    ] = None,
     quota_floor: Annotated[
-        int | None,
-        typer.Option(help="Stop before the daily quota drops to this value (live mode)."),
-    ] = None,
+        int, typer.Option(help="Stop before the daily quota drops to this value.")
+    ],
 ) -> None:
     """Run ingestion + commentary worker + web server in one local dev process."""
     try:
@@ -202,12 +160,8 @@ def dev(
             port=port,
             database=load_database_config(),
             model=load_model_config(),
-            apifootball=_runtime_api_config(
-                replay=replay, replay_step=replay_step, quota_floor=quota_floor
-            ),
+            apifootball=load_apifootball_config(),
             quota_floor=quota_floor,
-            replay_path=replay,
-            replay_step_minutes=replay_step,
             frontend_dir=composition.FRONTEND_DIR,
             sse_ping_seconds=sse_ping_seconds,
             max_messages_per_round=max_messages_per_round,
@@ -215,28 +169,6 @@ def dev(
     except ConfigError as exc:
         raise _config_error(str(exc)) from exc
     _run(composition.run_dev(config))
-
-
-@app.command()
-def record(
-    fixture: Annotated[int, typer.Option(help="api-football fixture id (must be finished).")],
-    output: Annotated[Path, typer.Option(help="Path of the replay JSON to write.")],
-) -> None:
-    """Record a finished fixture into a replay file."""
-    try:
-        api = composition.build_live_api(load_apifootball_config())
-    except ConfigError as exc:
-        raise _config_error(str(exc)) from exc
-    replay = _run(
-        _run_and_close_api(
-            api=api,
-            coro=composition.run_record(api=api, api_fixture_id=fixture, output=output),
-        )
-    )
-    typer.echo(
-        f"recorded fixture {fixture} ({replay.fixture.home.name} vs "
-        f"{replay.fixture.away.name}, {len(replay.events)} events) -> {output}"
-    )
 
 
 @app.command()

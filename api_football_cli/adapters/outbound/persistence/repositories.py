@@ -558,7 +558,7 @@ class SqlApiRequestLogRepository(ApiRequestLogRepository):
     def __init__(self, sessions: SessionFactory) -> None:
         self._sessions = sessions
 
-    async def record(self, *, endpoint: str, requests_remaining: int | None) -> None:
+    async def record(self, *, endpoint: str, requests_remaining: int) -> None:
         async with self._sessions() as session:
             async with session.begin():
                 session.add(

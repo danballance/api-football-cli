@@ -13,31 +13,28 @@ The whole runtime is event-driven: Postgres `LISTEN/NOTIFY` is the spine — ins
 event wakes the commentary worker, inserting a commentary line wakes the SSE stream. The full
 design lives in [.tasks/architecture.md](.tasks/architecture.md).
 
-## Quickstart (replay mode — no API key, no model spend)
-
-Replay mode replays a recorded fixture on an accelerated clock through the exact same pipeline
-as a live match.
+## Quickstart
 
 ```bash
 uv sync
 
 # Postgres is required (LISTEN/NOTIFY). Point at any empty database:
 export AFC_DATABASE_URL="postgresql+asyncpg://user:password@localhost:5432/afc"
+export AFC_APIFOOTBALL_KEY=...     # api-football.com key
 export AFC_MODEL_PROVIDER=fake     # canned lines, no model calls
 
 uv run afc db upgrade              # create schema + notify triggers
+uv run afc status                  # check your plan/quota
 uv run afc dev \
-  --fixture 999001 \
-  --interval 0.5 \
-  --replay examples/replay-demo.json \
-  --replay-step 5 \
+  --fixture <id> \
+  --interval 20 \
+  --quota-floor 10 \
   --host 127.0.0.1 --port 8000 \
   --sse-ping-seconds 15 \
   --max-messages-per-round 2
 ```
 
-Open <http://127.0.0.1:8000> — the demo match plays out in a couple of minutes with live
-commentary, scoreboard and a red card.
+Open <http://127.0.0.1:8000> to watch the live fixture with commentary and scoreboard updates.
 
 To use real AI commentators, switch the provider:
 
@@ -48,22 +45,13 @@ export AFC_ANTHROPIC_MODEL=claude-opus-4-8
 export AFC_ANTHROPIC_MAX_TOKENS=300
 ```
 
-## Live mode
+## Split runtime
 
 ```bash
-export AFC_APIFOOTBALL_KEY=...     # api-football.com key
-uv run afc status                  # check your plan/quota (free, does not consume quota)
-
 # Run each of the following commands in its own separate terminal/process simultaneously:
 uv run afc web --host 127.0.0.1 --port 8000 --sse-ping-seconds 15
 uv run afc ingest --fixture <id> --interval 20 --quota-floor 10
 uv run afc worker --fixture <id> --fixture-wait-seconds 60 --max-messages-per-round 2
-```
-
-Record a finished fixture for later replays:
-
-```bash
-uv run afc record --fixture <id> --output my-match.json
 ```
 
 ## Reference data
@@ -78,7 +66,7 @@ uv run afc sync fixtures --league 39 --season 2025
 
 ## Documentation
 
-- [docs/usage.md](docs/usage.md) — commands, configuration, replay/record workflow
+- [docs/usage.md](docs/usage.md) — commands and configuration
 - [docs/development.md](docs/development.md) — layout, testing strategy, checks
 - [.tasks/architecture.md](.tasks/architecture.md) — the full architecture design
 
