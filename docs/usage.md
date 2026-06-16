@@ -13,7 +13,7 @@ All configuration is explicit. Missing values fail fast with the exact variable 
 | `AFC_ANTHROPIC_MODEL` | worker/dev with anthropic | Model id, e.g. `claude-opus-4-8`. |
 | `AFC_ANTHROPIC_MAX_TOKENS` | worker/dev with anthropic | Per-line output cap, e.g. `300`. |
 
-CLI parameters such as poll intervals, ports, worker wait, and SSE ping are explicit.
+CLI parameters such as poll intervals, ports, worker message caps, and SSE ping are explicit.
 
 ## Database setup
 
@@ -32,7 +32,7 @@ by them; payloads carry row ids only and listeners catch up with a `SELECT ... W
 
 ## Production Process Commands
 
-Run one concern per process:
+Run one concern per process. Start the worker only after ingestion has created the fixture row:
 
 ```bash
 uv run afc web \
@@ -46,7 +46,6 @@ uv run afc ingest \
 
 uv run afc worker \
   --fixture 1145509 \
-  --fixture-wait-seconds 60 \
   --max-messages-per-round 2
 ```
 
@@ -56,10 +55,10 @@ uv run afc worker \
 `afc ingest` polls api-football and writes fixture/events/request-log rows. It exits when the
 fixture reaches a terminal status.
 
-`afc worker` resolves the internal fixture row from the api-football fixture id, takes a
-Postgres advisory lock for that fixture, listens for `fixture_event_inserted`, and writes
-commentary. `--fixture-wait-seconds 0` fails immediately if ingestion has not prepared the
-fixture row.
+`afc worker` requires the fixture row to already exist in Postgres. It resolves the
+internal fixture row from the api-football fixture id, takes a Postgres advisory lock for that
+fixture, listens for `fixture_event_inserted`, and writes commentary. If ingestion has not
+prepared the fixture row, the worker exits with an error.
 
 ## `afc dev` — Local All-In-One Runtime
 

@@ -13,7 +13,7 @@ from api_football_cli.config import AnthropicConfig, ApiFootballConfig, ConfigEr
 from api_football_cli.domain.entities import AccountStatus
 from api_football_cli.main import (
     FRONTEND_DIR,
-    _wait_for_fixture,
+    _require_prepared_fixture,
     build_commentary_model,
     build_live_api,
     run_status,
@@ -84,16 +84,16 @@ async def test_serve_runtime_completes_when_all_tasks_finish() -> None:
     await serve_runtime(ingestion=quick(), worker=quick(), server=quick())
 
 
-async def test_wait_for_fixture_fails_when_not_prepared() -> None:
+async def test_require_prepared_fixture_fails_when_not_prepared() -> None:
     fixtures = InMemoryFixtureRepository()
-    with pytest.raises(RuntimeError, match="not prepared"):
-        await _wait_for_fixture(fixtures=fixtures, api_fixture_id=1001, wait_seconds=0)
+    with pytest.raises(RuntimeError, match="not prepared in the database"):
+        await _require_prepared_fixture(fixtures=fixtures, api_fixture_id=1001)
 
 
-async def test_wait_for_fixture_returns_prepared_row() -> None:
+async def test_require_prepared_fixture_returns_prepared_row() -> None:
     fixtures = InMemoryFixtureRepository()
     created = await fixtures.upsert_snapshot(make_snapshot(api_fixture_id=1001))
-    found = await _wait_for_fixture(fixtures=fixtures, api_fixture_id=1001, wait_seconds=0)
+    found = await _require_prepared_fixture(fixtures=fixtures, api_fixture_id=1001)
     assert found == created
 
 

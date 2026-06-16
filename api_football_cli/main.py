@@ -66,7 +66,6 @@ from api_football_cli.domain.personas import PERSONAS
 # play-by-play reacts, the colour commentator responds.
 MAX_MESSAGES_PER_ROUND = 2
 SSE_PING_SECONDS = 15.0
-FIXTURE_WAIT_POLL_SECONDS = 0.25
 WORKER_LOCK_NAMESPACE = 0x0AFC
 
 # The frontend ships at the repository root beside the package directory.
@@ -92,7 +91,6 @@ class WorkerConfig(FrozenModel):
     api_fixture_id: int
     database: DatabaseConfig
     model: ModelConfig
-    fixture_wait_seconds: float
     max_messages_per_round: int
 
 
@@ -220,10 +218,6 @@ async def run_ingest(config: IngestConfig) -> Fixture:
 
 async def run_worker(config: WorkerConfig) -> None:
     config.database.require_postgres()
-    if config.fixture_wait_seconds < 0:
-        raise ValueError(
-            f"fixture_wait_seconds must be >= 0, got {config.fixture_wait_seconds}"
-        )
     if config.max_messages_per_round <= 0:
         raise ValueError(
             f"max_messages_per_round must be positive, got {config.max_messages_per_round}"
@@ -234,10 +228,9 @@ async def run_worker(config: WorkerConfig) -> None:
         stack.push_async_callback(engine.dispose)
 
         fixtures = SqlFixtureRepository(sessions)
-        fixture = await _wait_for_fixture(
+        fixture = await _require_prepared_fixture(
             fixtures=fixtures,
             api_fixture_id=config.api_fixture_id,
-            wait_seconds=config.fixture_wait_seconds,
         )
 
         lock_connection = await engine.connect()
@@ -325,24 +318,18 @@ async def run_dev(config: DevConfig) -> None:
         )
 
 
-async def _wait_for_fixture(
+async def _require_prepared_fixture(
     *,
     fixtures: FixtureRepository,
     api_fixture_id: int,
-    wait_seconds: float,
 ) -> Fixture:
-    deadline = asyncio.get_running_loop().time() + wait_seconds
-    while True:
-        try:
-            return await fixtures.get_by_api_fixture_id(api_fixture_id)
-        except NotFoundError as exc:
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                raise RuntimeError(
-                    f"api-football fixture {api_fixture_id} is not prepared; "
-                    "start ingestion first or increase --fixture-wait-seconds"
-                ) from exc
-            await asyncio.sleep(min(FIXTURE_WAIT_POLL_SECONDS, remaining))
+    try:
+        return await fixtures.get_by_api_fixture_id(api_fixture_id)
+    except NotFoundError as exc:
+        raise RuntimeError(
+            f"api-football fixture {api_fixture_id} is not prepared in the database; "
+            "run ingestion before starting the worker"
+        ) from exc
 
 
 async def _acquire_worker_lock(

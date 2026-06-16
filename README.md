@@ -47,10 +47,12 @@ export AFC_ANTHROPIC_MAX_TOKENS=300
 ## Split runtime
 
 ```bash
-# Run each of the following commands in its own separate terminal/process simultaneously:
+# Run web and ingest in separate terminals/processes first:
 uv run afc web --host 127.0.0.1 --port 8000 --sse-ping-seconds 15
 uv run afc ingest --fixture <id> --interval 20
-uv run afc worker --fixture <id> --fixture-wait-seconds 60 --max-messages-per-round 2
+
+# After ingestion has created the fixture row, start the worker:
+uv run afc worker --fixture <id> --max-messages-per-round 2
 ```
 
 ## Reference data

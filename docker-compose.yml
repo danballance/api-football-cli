@@ -122,7 +122,7 @@ services:
         "/bin/sh",
         "-eu",
         "-c",
-        "uv sync --frozen && exec uv run afc worker --fixture \"${AFC_FIXTURE_ID:?set AFC_FIXTURE_ID in .env}\" --fixture-wait-seconds \"${AFC_WORKER_FIXTURE_WAIT_SECONDS:?set AFC_WORKER_FIXTURE_WAIT_SECONDS in .env}\" --max-messages-per-round \"${AFC_MAX_MESSAGES_PER_ROUND:?set AFC_MAX_MESSAGES_PER_ROUND in .env}\"",
+        "uv sync --frozen && exec uv run afc worker --fixture \"${AFC_FIXTURE_ID:?set AFC_FIXTURE_ID in .env}\" --max-messages-per-round \"${AFC_MAX_MESSAGES_PER_ROUND:?set AFC_MAX_MESSAGES_PER_ROUND in .env}\"",
       ]
 
 volumes:

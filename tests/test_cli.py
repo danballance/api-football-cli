@@ -178,8 +178,6 @@ def test_worker_builds_config(monkeypatch: pytest.MonkeyPatch) -> None:
             "worker",
             "--fixture",
             "999001",
-            "--fixture-wait-seconds",
-            "30",
             "--max-messages-per-round",
             "2",
         ],
@@ -187,7 +185,6 @@ def test_worker_builds_config(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert captured["config"].api_fixture_id == 999001
-    assert captured["config"].fixture_wait_seconds == 30
     assert captured["config"].max_messages_per_round == 2
 
 

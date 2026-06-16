@@ -105,12 +105,6 @@ def ingest(
 @app.command()
 def worker(
     fixture: Annotated[int, typer.Option(help="api-football fixture id to commentate.")],
-    fixture_wait_seconds: Annotated[
-        float,
-        typer.Option(
-            help="Seconds to wait for the ingester to create the fixture row; use 0 to fail fast."
-        ),
-    ],
     max_messages_per_round: Annotated[
         int, typer.Option(help="Maximum commentary messages produced per event round.")
     ],
@@ -121,7 +115,6 @@ def worker(
             api_fixture_id=fixture,
             database=load_database_config(),
             model=load_model_config(),
-            fixture_wait_seconds=fixture_wait_seconds,
             max_messages_per_round=max_messages_per_round,
         )
     except ConfigError as exc:
