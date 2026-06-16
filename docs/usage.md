@@ -6,15 +6,15 @@ All configuration is explicit. Missing values fail fast with the exact variable 
 
 | Variable | Required by | Meaning |
 |---|---|---|
-| `AFC_DATABASE_URL` | serve, sync, db | SQLAlchemy async URL. The live runtime requires `postgresql+asyncpg://…` (LISTEN/NOTIFY needs Postgres). |
-| `AFC_APIFOOTBALL_KEY` | live serve, record, status, sync | Your api-football.com key (`x-apisports-key`). |
-| `AFC_MODEL_PROVIDER` | serve | `anthropic` or `fake`. There is no default provider. |
-| `AFC_ANTHROPIC_API_KEY` | serve (anthropic) | Anthropic API key. |
-| `AFC_ANTHROPIC_MODEL` | serve (anthropic) | Model id, e.g. `claude-opus-4-8`. |
-| `AFC_ANTHROPIC_MAX_TOKENS` | serve (anthropic) | Per-line output cap, e.g. `300`. |
+| `AFC_DATABASE_URL` | web, ingest, worker, dev, sync, db | SQLAlchemy async Postgres URL. Runtime processes require `postgresql+asyncpg://…`. |
+| `AFC_APIFOOTBALL_KEY` | live ingest, live dev, record, status, sync | Your api-football.com key (`x-apisports-key`). |
+| `AFC_MODEL_PROVIDER` | worker, dev | `anthropic` or `fake`. There is no default provider. |
+| `AFC_ANTHROPIC_API_KEY` | worker/dev with anthropic | Anthropic API key. |
+| `AFC_ANTHROPIC_MODEL` | worker/dev with anthropic | Model id, e.g. `claude-opus-4-8`. |
+| `AFC_ANTHROPIC_MAX_TOKENS` | worker/dev with anthropic | Per-line output cap, e.g. `300`. |
 
-CLI parameters (interval, ports, replay step, quota floor) are likewise explicit — there are
-no default values.
+CLI parameters such as poll intervals, ports, replay step, worker wait, SSE ping, and quota
+floor are explicit.
 
 ## Database setup
 
@@ -25,37 +25,86 @@ uv run afc db upgrade        # alembic upgrade head, must run from the project r
 
 The initial migration creates the schema plus two `AFTER INSERT` triggers:
 
-- `fixture_event` insert → `pg_notify('fixture_event_inserted', '{"fixture_id": …, "id": …}')`
-- `commentary_message` insert → `pg_notify('commentary_inserted', …)`
+- `fixture_event` insert -> `pg_notify('fixture_event_inserted', '{"fixture_id": ..., "id": ...}')`
+- `commentary_message` insert -> `pg_notify('commentary_inserted', ...)`
 
 These notifications are the reactive spine: the commentary worker and the SSE stream are woken
-by them; payloads carry row ids only and listeners catch up with a `SELECT … WHERE id > last`.
+by them; payloads carry row ids only and listeners catch up with a `SELECT ... WHERE id > last`.
 
-## `afc serve` — the live runtime
+## Production Process Commands
 
-One async process supervising three tasks in a single `asyncio.TaskGroup`: ingestion, the
-commentary worker, and the FastAPI/SSE server. If any task fails the process exits (fail
-fast); the database is the durable source of truth, so a supervisor can simply restart it.
+Run one concern per process:
 
 ```bash
-# Replay (dev/demo default): no API key needed
-uv run afc serve --fixture 999001 --interval 0.5 \
-  --replay examples/replay-demo.json --replay-step 5 \
-  --host 127.0.0.1 --port 8000
+uv run afc web \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --sse-ping-seconds 15
 
-# Live: poll api-football every 20s, stop before the daily quota hits 10
-uv run afc serve --fixture 1145509 --interval 20 --quota-floor 10 \
-  --host 127.0.0.1 --port 8000
+uv run afc ingest \
+  --fixture 1145509 \
+  --interval 20 \
+  --quota-floor 10
+
+uv run afc worker \
+  --fixture 1145509 \
+  --fixture-wait-seconds 60 \
+  --max-messages-per-round 2
 ```
 
-- `--interval` — seconds between polls. api-football updates live data every ~15s and
-  recommends ~1 request/minute per fixture; 15–30s is sensible. Required, no default.
-- `--replay` / `--replay-step` — replay file and how many simulated match minutes each poll
-  advances. `--replay-step 5` with `--interval 0.5` plays 90 minutes in ~9 seconds of polls.
-- `--quota-floor` — live mode only: ingestion fails fast when the daily quota (taken from the
-  rate-limit headers on every response) drops to this value.
+`afc web` serves REST, SSE, and the React UI only. It needs the database and listens for
+`commentary_inserted`.
 
-The serve process keeps serving the UI after full time; stop it with Ctrl+C.
+`afc ingest` polls api-football or a replay file and writes fixture/events/request-log rows.
+It exits when the fixture reaches a terminal status.
+
+`afc worker` resolves the internal fixture row from the api-football fixture id, takes a
+Postgres advisory lock for that fixture, listens for `fixture_event_inserted`, and writes
+commentary. `--fixture-wait-seconds 0` fails immediately if ingestion has not prepared the
+fixture row.
+
+Replay ingestion uses the same process boundary:
+
+```bash
+uv run afc ingest \
+  --fixture 999001 \
+  --interval 0.5 \
+  --replay examples/replay-demo.json \
+  --replay-step 5
+```
+
+## `afc dev` — Local All-In-One Runtime
+
+For local demos, `afc dev` preserves the single-process TaskGroup composition:
+
+```bash
+export AFC_MODEL_PROVIDER=fake
+
+uv run afc dev \
+  --fixture 999001 \
+  --interval 0.5 \
+  --replay examples/replay-demo.json \
+  --replay-step 5 \
+  --host 127.0.0.1 \
+  --port 8000 \
+  --sse-ping-seconds 15 \
+  --max-messages-per-round 2
+```
+
+Live mode:
+
+```bash
+uv run afc dev \
+  --fixture 1145509 \
+  --interval 20 \
+  --quota-floor 10 \
+  --host 127.0.0.1 \
+  --port 8000 \
+  --sse-ping-seconds 15 \
+  --max-messages-per-round 2
+```
+
+The dev process keeps serving the UI after full time; stop it with Ctrl+C.
 
 ### Web API
 
@@ -70,38 +119,37 @@ The serve process keeps serving the UI after full time; stop it with Ctrl+C.
 | `GET /` | The React chat UI |
 
 The SSE stream sends whole messages (`event: commentary`, `id: <message id>`); browsers
-reconnect automatically and replay from `Last-Event-ID`. `{id}` is **our** fixture id (from
-`GET /fixtures`), not the api-football id.
+reconnect automatically and replay from `Last-Event-ID`. `{id}` is **our** fixture id from
+`GET /fixtures`, not the api-football id.
 
-## `afc record` — capture a replay
+## `afc record` — Capture A Replay
 
 ```bash
 uv run afc record --fixture 1035043 --output my-match.json
 ```
 
-Fetches a **finished** fixture (status FT/AET/PEN…) and writes its metadata plus the full
-event list. Costs two API requests. The file feeds `afc serve --replay`.
+Fetches a **finished** fixture (status FT/AET/PEN...) and writes its metadata plus the full
+event list. Costs two API requests. The file feeds `afc ingest --replay` or `afc dev --replay`.
 
 ## `afc status`
 
 Prints account, plan and today's request usage. Uses `/status`, which does not count against
-the daily quota — a safe preflight check.
+the daily quota.
 
-## `afc sync` — reference data
+## `afc sync` — Reference Data
 
-One-shot crawls, upserted on the `api_*_id` columns (idempotent, safe to re-run):
+One-shot crawls, upserted on the `api_*_id` columns:
 
 ```bash
-uv run afc sync leagues  --season 2025                 # leagues + seasons + countries
-uv run afc sync teams    --league 39 --season 2025     # teams + venues
-uv run afc sync fixtures --league 39 --season 2025     # fixture rows
+uv run afc sync leagues  --season 2025
+uv run afc sync teams    --league 39 --season 2025
+uv run afc sync fixtures --league 39 --season 2025
 ```
 
 Live ingestion creates minimal league/team rows on its own; sync enriches them.
 
-## The frontend
+## The Frontend
 
-`frontend/` is a no-build React app (ES modules via an import map; React + htm from esm.sh)
-served as static files by FastAPI on the same origin. It picks the first fixture from
-`/fixtures` (override with `/?fixture=<id>`), opens the SSE stream, and polls the scoreboard
-every 10 seconds. Editing `frontend/*.js|css|html` requires only a browser refresh.
+`frontend/` is a no-build React app served as static files by FastAPI on the same origin. It
+picks the first fixture from `/fixtures` (override with `/?fixture=<id>`), opens the SSE stream,
+and polls the scoreboard every 10 seconds.

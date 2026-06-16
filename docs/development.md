@@ -18,7 +18,7 @@ api_football_cli/
     outbound/messaging/     PostgresListenNotifyBus + InMemoryBus
     outbound/model/         AnthropicCommentaryModel + FakeModel
   config.py           explicit env loading, no defaults
-  main.py             composition root: wiring + TaskGroup supervision
+  main.py             composition root: split process wiring + local dev supervisor
 alembic/              migrations (incl. the pg_notify triggers)
 frontend/             no-build React chat UI
 examples/             replay-demo.json (feeds tests, demos and the quickstart)
@@ -55,14 +55,16 @@ Everything runs with no network, no Postgres and no model spend:
 - **Web** — REST via `httpx.ASGITransport`; SSE via a real uvicorn server on an ephemeral
   port, because ASGITransport buffers entire responses and can never observe an endless
   event stream.
-- **CLI** — `typer.testing.CliRunner` with the composition functions monkeypatched; the
+- **CLI** — `typer.testing.CliRunner` with the process composition functions monkeypatched; the
   `afc db upgrade` test runs the real Alembic migration against a SQLite file.
 - **Pipeline** — `tests/test_pipeline.py` replays the shipped demo end-to-end:
   ingest → notifications → rounds → stream.
 
-The only code not covered by the suite is `main.run_serve` itself (it needs a live Postgres);
-it is a thin composition of individually tested builders, and was verified manually against a
-disposable Postgres (`afc db upgrade` + replay serve + SSE curl).
+The "no Postgres requirement" applies only to the unit test suite. The split runtime
+entrypoints (`main.run_web`, `main.run_ingest`, `main.run_worker`, and `main.run_dev`)
+require a live Postgres instance when doing end-to-end verification or manual replay
+verification outside of unit tests. The unit suite covers their builders, service boundaries,
+CLI wiring, and the local TaskGroup supervisor.
 
 ## Deliberate implementation choices (vs. the architecture doc)
 

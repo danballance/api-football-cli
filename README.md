@@ -5,8 +5,8 @@ football match from api-football and talk to each other about it in real time. C
 pushed to a React chat UI over Server-Sent Events.
 
 ```
-api-football  →  Ingestion  →  Postgres  →  Commentary worker  →  Postgres  →  FastAPI (SSE)  →  React
-  (HTTP poll)    (async task)   (events)    (2× model calls)      (messages)    (push)          (chat UI)
+api-football  ->  ingester  ->  Postgres  ->  commentary-worker  ->  Postgres  ->  web  ->  React
+  (HTTP poll)      (process)     (events)      (model calls)          (messages)    (SSE)    (chat UI)
 ```
 
 The whole runtime is event-driven: Postgres `LISTEN/NOTIFY` is the spine — inserting a match
@@ -26,12 +26,14 @@ export AFC_DATABASE_URL="postgresql+asyncpg://user:password@localhost:5432/afc"
 export AFC_MODEL_PROVIDER=fake     # canned lines, no model calls
 
 uv run afc db upgrade              # create schema + notify triggers
-uv run afc serve \
+uv run afc dev \
   --fixture 999001 \
   --interval 0.5 \
   --replay examples/replay-demo.json \
   --replay-step 5 \
-  --host 127.0.0.1 --port 8000
+  --host 127.0.0.1 --port 8000 \
+  --sse-ping-seconds 15 \
+  --max-messages-per-round 2
 ```
 
 Open <http://127.0.0.1:8000> — the demo match plays out in a couple of minutes with live
@@ -51,7 +53,11 @@ export AFC_ANTHROPIC_MAX_TOKENS=300
 ```bash
 export AFC_APIFOOTBALL_KEY=...     # api-football.com key
 uv run afc status                  # check your plan/quota (free, does not consume quota)
-uv run afc serve --fixture <id> --interval 20 --quota-floor 10 --host 127.0.0.1 --port 8000
+
+# Run each of the following commands in its own separate terminal/process simultaneously:
+uv run afc web --host 127.0.0.1 --port 8000 --sse-ping-seconds 15
+uv run afc ingest --fixture <id> --interval 20 --quota-floor 10
+uv run afc worker --fixture <id> --fixture-wait-seconds 60 --max-messages-per-round 2
 ```
 
 Record a finished fixture for later replays:

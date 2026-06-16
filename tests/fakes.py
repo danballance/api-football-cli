@@ -91,6 +91,12 @@ class InMemoryFixtureRepository:
             raise NotFoundError(f"fixture {fixture_id} not found")
         return self._by_id[fixture_id]
 
+    async def get_by_api_fixture_id(self, api_fixture_id: int) -> Fixture:
+        for fixture in self._by_id.values():
+            if fixture.api_fixture_id == api_fixture_id:
+                return fixture
+        raise NotFoundError(f"api-football fixture {api_fixture_id} not found")
+
     async def list_all(self) -> list[Fixture]:
         return [self._by_id[key] for key in sorted(self._by_id)]
 

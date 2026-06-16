@@ -30,12 +30,13 @@ from api_football_cli.adapters.outbound.persistence.tables import (
     VenueRow,
 )
 from api_football_cli.application.ports.repositories import (
+    ApiRequestLogRepository,
     CommentaryRepository,
     CommentatorRepository,
     EventRepository,
     FixtureRepository,
     NotFoundError,
-    ReferenceRepository, ApiRequestLogRepository,
+    ReferenceRepository,
 )
 from api_football_cli.domain.entities import (
     CommentaryDraft,
@@ -231,6 +232,15 @@ class SqlFixtureRepository(FixtureRepository):
             row = await session.get(FixtureRow, fixture_id)
             if row is None:
                 raise NotFoundError(f"fixture {fixture_id} not found")
+            return await _fixture_to_domain(session, row)
+
+    async def get_by_api_fixture_id(self, api_fixture_id: int) -> Fixture:
+        async with self._sessions() as session:
+            row = await session.scalar(
+                select(FixtureRow).where(FixtureRow.api_fixture_id == api_fixture_id)
+            )
+            if row is None:
+                raise NotFoundError(f"api-football fixture {api_fixture_id} not found")
             return await _fixture_to_domain(session, row)
 
     async def list_all(self) -> list[Fixture]:

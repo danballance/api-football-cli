@@ -10,7 +10,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"${POSTGRES_USER:?set POSTGRES_USER in .env}\" -d \"${POSTGRES_DB:?set POSTGRES_DB in .env}\""]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"${POSTGRES_USER:?set POSTGRES_USER in .env}\" -d \"${POSTGRES_DB:?set POSTGRES_DB in .env}\"",
+        ]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -34,7 +38,7 @@ services:
         condition: service_healthy
     command: ["/bin/sh", "-eu", "-c", "uv sync --frozen && uv run afc db upgrade"]
 
-  afc:
+  web:
     image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim
     working_dir: /workspace
     env_file:
@@ -54,6 +58,34 @@ services:
         condition: service_completed_successfully
     ports:
       - "${AFC_HOST_PORT:?set AFC_HOST_PORT in .env}:${AFC_WEB_PORT:?set AFC_WEB_PORT in .env}"
+    restart: unless-stopped
+    command:
+      [
+        "/bin/sh",
+        "-eu",
+        "-c",
+        "uv sync --frozen && exec uv run afc web --host \"${AFC_WEB_HOST:?set AFC_WEB_HOST in .env}\" --port \"${AFC_WEB_PORT:?set AFC_WEB_PORT in .env}\" --sse-ping-seconds \"${AFC_WEB_SSE_PING_SECONDS:?set AFC_WEB_SSE_PING_SECONDS in .env}\"",
+      ]
+
+  ingester:
+    image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim
+    working_dir: /workspace
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      UV_LINK_MODE: copy
+      UV_PROJECT_ENVIRONMENT: /workspace/.venv
+    volumes:
+      - .:/workspace
+      - afc_venv:/workspace/.venv
+      - uv_cache:/root/.cache/uv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    restart: on-failure
     command:
       - /bin/sh
       - -eu
@@ -62,26 +94,51 @@ services:
         uv sync --frozen
 
         if [ "${AFC_RUN_MODE:?set AFC_RUN_MODE in .env}" = "replay" ]; then
-          exec uv run afc serve \
+          exec uv run afc ingest \
             --fixture "${AFC_FIXTURE_ID:?set AFC_FIXTURE_ID in .env}" \
             --interval "${AFC_POLL_INTERVAL_SECONDS:?set AFC_POLL_INTERVAL_SECONDS in .env}" \
-            --host "${AFC_WEB_HOST:?set AFC_WEB_HOST in .env}" \
-            --port "${AFC_WEB_PORT:?set AFC_WEB_PORT in .env}" \
             --replay "${AFC_REPLAY_PATH:?set AFC_REPLAY_PATH in .env}" \
             --replay-step "${AFC_REPLAY_STEP_MINUTES:?set AFC_REPLAY_STEP_MINUTES in .env}"
         fi
 
         if [ "${AFC_RUN_MODE:?set AFC_RUN_MODE in .env}" = "live" ]; then
-          exec uv run afc serve \
+          exec uv run afc ingest \
             --fixture "${AFC_FIXTURE_ID:?set AFC_FIXTURE_ID in .env}" \
             --interval "${AFC_POLL_INTERVAL_SECONDS:?set AFC_POLL_INTERVAL_SECONDS in .env}" \
-            --host "${AFC_WEB_HOST:?set AFC_WEB_HOST in .env}" \
-            --port "${AFC_WEB_PORT:?set AFC_WEB_PORT in .env}" \
             --quota-floor "${AFC_QUOTA_FLOOR:?set AFC_QUOTA_FLOOR in .env}"
         fi
 
         echo "error: AFC_RUN_MODE must be 'replay' or 'live', got '${AFC_RUN_MODE:?set AFC_RUN_MODE in .env}'" >&2
         exit 1
+
+  commentary-worker:
+    image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim
+    working_dir: /workspace
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      UV_LINK_MODE: copy
+      UV_PROJECT_ENVIRONMENT: /workspace/.venv
+    volumes:
+      - .:/workspace
+      - afc_venv:/workspace/.venv
+      - uv_cache:/root/.cache/uv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+      ingester:
+        condition: service_started
+    restart: on-failure
+    command:
+      [
+        "/bin/sh",
+        "-eu",
+        "-c",
+        "uv sync --frozen && exec uv run afc worker --fixture \"${AFC_FIXTURE_ID:?set AFC_FIXTURE_ID in .env}\" --fixture-wait-seconds \"${AFC_WORKER_FIXTURE_WAIT_SECONDS:?set AFC_WORKER_FIXTURE_WAIT_SECONDS in .env}\" --max-messages-per-round \"${AFC_MAX_MESSAGES_PER_ROUND:?set AFC_MAX_MESSAGES_PER_ROUND in .env}\"",
+      ]
 
 volumes:
   postgres_data:
