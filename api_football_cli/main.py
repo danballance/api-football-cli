@@ -86,7 +86,6 @@ class IngestConfig(FrozenModel):
     interval_seconds: float
     database: DatabaseConfig
     apifootball: ApiFootballConfig
-    quota_floor: int
 
 
 class WorkerConfig(FrozenModel):
@@ -105,7 +104,6 @@ class DevConfig(FrozenModel):
     database: DatabaseConfig
     model: ModelConfig
     apifootball: ApiFootballConfig
-    quota_floor: int
     frontend_dir: Path | None
     sse_ping_seconds: float
     max_messages_per_round: int
@@ -216,7 +214,6 @@ async def run_ingest(config: IngestConfig) -> Fixture:
             events=SqlEventRepository(sessions),
             request_log=SqlApiRequestLogRepository(sessions),
             interval_seconds=config.interval_seconds,
-            quota_floor=config.quota_floor,
         )
         return await service.run(config.api_fixture_id)
 
@@ -299,7 +296,6 @@ async def run_dev(config: DevConfig) -> None:
             events=events,
             request_log=SqlApiRequestLogRepository(sessions),
             interval_seconds=config.interval_seconds,
-            quota_floor=config.quota_floor,
         )
         rounds = GenerateCommentaryRound(
             fixtures=fixtures,

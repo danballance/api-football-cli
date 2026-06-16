@@ -104,8 +104,7 @@ services:
         if [ "${AFC_RUN_MODE:?set AFC_RUN_MODE in .env}" = "live" ]; then
           exec uv run afc ingest \
             --fixture "${AFC_FIXTURE_ID:?set AFC_FIXTURE_ID in .env}" \
-            --interval "${AFC_POLL_INTERVAL_SECONDS:?set AFC_POLL_INTERVAL_SECONDS in .env}" \
-            --quota-floor "${AFC_QUOTA_FLOOR:?set AFC_QUOTA_FLOOR in .env}"
+            --interval "${AFC_POLL_INTERVAL_SECONDS:?set AFC_POLL_INTERVAL_SECONDS in .env}"
         fi
 
         echo "error: AFC_RUN_MODE must be 'replay' or 'live', got '${AFC_RUN_MODE:?set AFC_RUN_MODE in .env}'" >&2

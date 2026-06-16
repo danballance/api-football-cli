@@ -68,7 +68,6 @@ async def test_full_pipeline() -> None:
         events=events,
         request_log=InMemoryRequestLog(),
         interval_seconds=0,
-        quota_floor=5,
     )
     rounds = GenerateCommentaryRound(
         fixtures=fixtures,

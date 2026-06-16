@@ -19,10 +19,6 @@ from api_football_cli.domain.entities import TERMINAL_STATUSES, Fixture
 POLL_ENDPOINT_LABEL = "fixtures+fixtures/events"
 
 
-class QuotaExhaustedError(RuntimeError):
-    """Raised (fail fast) when the daily quota drops to the configured floor."""
-
-
 class IngestFixtureEvents:
     def __init__(
         self,
@@ -32,18 +28,14 @@ class IngestFixtureEvents:
         events: EventRepository,
         request_log: ApiRequestLogRepository,
         interval_seconds: float,
-        quota_floor: int,
     ) -> None:
         if interval_seconds < 0:
             raise ValueError(f"interval_seconds must be >= 0, got {interval_seconds}")
-        if quota_floor < 0:
-            raise ValueError(f"quota_floor must be >= 0, got {quota_floor}")
         self._api = api
         self._fixtures = fixtures
         self._events = events
         self._request_log = request_log
         self._interval_seconds = interval_seconds
-        self._quota_floor = quota_floor
 
     async def poll_once(self, api_fixture_id: int) -> Fixture:
         """One poll cycle: refresh the fixture row and append any new events."""
@@ -57,11 +49,6 @@ class IngestFixtureEvents:
         await self._request_log.record(
             endpoint=POLL_ENDPOINT_LABEL, requests_remaining=remaining
         )
-        if remaining <= self._quota_floor:
-            raise QuotaExhaustedError(
-                f"api-football daily quota at {remaining} requests "
-                f"(floor {self._quota_floor}); stopping before it runs out"
-            )
         return fixture
 
     async def run(self, api_fixture_id: int) -> Fixture:

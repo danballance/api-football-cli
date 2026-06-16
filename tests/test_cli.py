@@ -78,17 +78,10 @@ def make_fixture() -> Fixture:
     )
 
 
-def test_dev_requires_quota_floor(monkeypatch: pytest.MonkeyPatch) -> None:
-    set_base_env(monkeypatch)
-    result = runner.invoke(app, DEV_ARGS)
-    assert result.exit_code == 2
-    assert "--quota-floor" in result.stderr
-
-
 def test_dev_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     set_base_env(monkeypatch)
     monkeypatch.delenv("AFC_APIFOOTBALL_KEY", raising=False)
-    result = runner.invoke(app, [*DEV_ARGS, "--quota-floor", "5"])
+    result = runner.invoke(app, DEV_ARGS)
     assert result.exit_code == 1
     assert "AFC_APIFOOTBALL_KEY" in result.stderr
 
@@ -103,12 +96,11 @@ def test_dev_builds_config(monkeypatch: pytest.MonkeyPatch) -> None:
         captured["config"] = config
 
     monkeypatch.setattr(composition, "run_dev", fake_run_dev)
-    result = runner.invoke(app, [*DEV_ARGS, "--quota-floor", "10"])
+    result = runner.invoke(app, DEV_ARGS)
 
     assert result.exit_code == 0, result.output
     config = captured["config"]
     assert config.apifootball.key == "secret"
-    assert config.quota_floor == 10
     assert config.model.provider == "fake"
     assert config.frontend_dir == composition.FRONTEND_DIR
     assert config.sse_ping_seconds == 15
@@ -123,7 +115,7 @@ def test_dev_surfaces_runtime_errors(monkeypatch: pytest.MonkeyPatch) -> None:
         raise RuntimeError("runtime blew up")
 
     monkeypatch.setattr(composition, "run_dev", exploding_run_dev)
-    result = runner.invoke(app, [*DEV_ARGS, "--quota-floor", "5"])
+    result = runner.invoke(app, DEV_ARGS)
     assert result.exit_code == 1
     assert "runtime blew up" in result.stderr
 
@@ -155,13 +147,6 @@ def test_web_builds_config(monkeypatch: pytest.MonkeyPatch) -> None:
     assert captured["config"].sse_ping_seconds == 12.5
 
 
-def test_ingest_requires_quota_floor(monkeypatch: pytest.MonkeyPatch) -> None:
-    set_base_env(monkeypatch)
-    result = runner.invoke(app, INGEST_ARGS)
-    assert result.exit_code == 2
-    assert "--quota-floor" in result.stderr
-
-
 def test_ingest_builds_config(monkeypatch: pytest.MonkeyPatch) -> None:
     set_base_env(monkeypatch)
     monkeypatch.setenv("AFC_APIFOOTBALL_KEY", "secret")
@@ -172,12 +157,11 @@ def test_ingest_builds_config(monkeypatch: pytest.MonkeyPatch) -> None:
         return make_fixture()
 
     monkeypatch.setattr(composition, "run_ingest", fake_run_ingest)
-    result = runner.invoke(app, [*INGEST_ARGS, "--quota-floor", "10"])
+    result = runner.invoke(app, INGEST_ARGS)
 
     assert result.exit_code == 0, result.output
     assert "status='FT'" in result.output
     assert captured["config"].apifootball.key == "secret"
-    assert captured["config"].quota_floor == 10
 
 
 def test_worker_builds_config(monkeypatch: pytest.MonkeyPatch) -> None:

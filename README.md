@@ -28,7 +28,6 @@ uv run afc status                  # check your plan/quota
 uv run afc dev \
   --fixture <id> \
   --interval 20 \
-  --quota-floor 10 \
   --host 127.0.0.1 --port 8000 \
   --sse-ping-seconds 15 \
   --max-messages-per-round 2
@@ -50,7 +49,7 @@ export AFC_ANTHROPIC_MAX_TOKENS=300
 ```bash
 # Run each of the following commands in its own separate terminal/process simultaneously:
 uv run afc web --host 127.0.0.1 --port 8000 --sse-ping-seconds 15
-uv run afc ingest --fixture <id> --interval 20 --quota-floor 10
+uv run afc ingest --fixture <id> --interval 20
 uv run afc worker --fixture <id> --fixture-wait-seconds 60 --max-messages-per-round 2
 ```
 

@@ -13,8 +13,7 @@ All configuration is explicit. Missing values fail fast with the exact variable 
 | `AFC_ANTHROPIC_MODEL` | worker/dev with anthropic | Model id, e.g. `claude-opus-4-8`. |
 | `AFC_ANTHROPIC_MAX_TOKENS` | worker/dev with anthropic | Per-line output cap, e.g. `300`. |
 
-CLI parameters such as poll intervals, ports, worker wait, SSE ping, and quota floor are
-explicit.
+CLI parameters such as poll intervals, ports, worker wait, and SSE ping are explicit.
 
 ## Database setup
 
@@ -43,8 +42,7 @@ uv run afc web \
 
 uv run afc ingest \
   --fixture 1145509 \
-  --interval 20 \
-  --quota-floor 10
+  --interval 20
 
 uv run afc worker \
   --fixture 1145509 \
@@ -71,7 +69,6 @@ fixture row.
 uv run afc dev \
   --fixture 1145509 \
   --interval 20 \
-  --quota-floor 10 \
   --host 127.0.0.1 \
   --port 8000 \
   --sse-ping-seconds 15 \

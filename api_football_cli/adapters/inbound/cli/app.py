@@ -85,9 +85,6 @@ def ingest(
     interval: Annotated[
         float, typer.Option(help="Seconds between polls (recommend 15-30 live).")
     ],
-    quota_floor: Annotated[
-        int, typer.Option(help="Stop before the daily quota drops to this value.")
-    ],
 ) -> None:
     """Poll live fixture data into Postgres."""
     try:
@@ -96,7 +93,6 @@ def ingest(
             interval_seconds=interval,
             database=load_database_config(),
             apifootball=load_apifootball_config(),
-            quota_floor=quota_floor,
         )
     except ConfigError as exc:
         raise _config_error(str(exc)) from exc
@@ -147,9 +143,6 @@ def dev(
     max_messages_per_round: Annotated[
         int, typer.Option(help="Maximum commentary messages produced per event round.")
     ],
-    quota_floor: Annotated[
-        int, typer.Option(help="Stop before the daily quota drops to this value.")
-    ],
 ) -> None:
     """Run ingestion + commentary worker + web server in one local dev process."""
     try:
@@ -161,7 +154,6 @@ def dev(
             database=load_database_config(),
             model=load_model_config(),
             apifootball=load_apifootball_config(),
-            quota_floor=quota_floor,
             frontend_dir=composition.FRONTEND_DIR,
             sse_ping_seconds=sse_ping_seconds,
             max_messages_per_round=max_messages_per_round,
